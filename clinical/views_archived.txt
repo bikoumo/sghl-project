@@ -1,0 +1,13 @@
+# Ce fichier a été renommé car le projet utilise Django Ninja (pas DRF)
+# Les endpoints finalisés sont dans clinical/views_ninja.py et clinical/api.py
+# 
+# Pour référence, les vues originales DRF auraient fourni ces endpoints :
+# - POST /api/v1/clinical/verify-code/ (MFA)
+# - GET/POST /api/v1/clinical/appointments/ (RDV)
+# - GET /api/v1/clinical/stats/ (Statistiques)
+# - GET/POST /api/v1/clinical/provisions/ (Stocks)
+# - GET /api/v1/clinical/hospitalizations/ (Hospitalisations)
+# - GET /api/v1/clinical/consultations/ (Consultations)
+# - GET /api/v1/clinical/support-tasks/ (Tâches support)
+# 
+# Ces endpoints sont maintenant implémentés dans clinical/api.py avec Ninja

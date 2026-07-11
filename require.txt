@@ -1,0 +1,28 @@
+# =============================================================================
+# SGHL — Dépendances Python
+# Installation : pip install -r require.txt
+# Python recommandé : 3.12.x
+# =============================================================================
+
+# Framework Django
+Django>=6.0,<7.0
+
+# API REST (inclut pydantic)
+django-ninja>=1.6,<2.0
+
+# CORS frontend Vue.js
+django-cors-headers>=4.9,<5.0
+
+# PostgreSQL
+psycopg2-binary>=2.9,<3.0
+dj-database-url>=2.1,<3.0
+
+# Production
+gunicorn>=22.0,<24.0
+whitenoise>=6.6,<7.0
+
+# Validation Pydantic
+email-validator>=2.0,<3.0
+
+# Variables d'environnement locales
+python-dotenv>=1.0,<2.0

@@ -1,0 +1,75 @@
+# =============================================================================
+# SGHL — Blueprint Render
+# Déploiement : Dashboard Render → New → Blueprint → connecter ce dépôt Git
+# =============================================================================
+
+databases:
+  - name: sghl-db
+    plan: free
+    databaseName: sghl
+    user: sghl
+    region: frankfurt
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend Django (API Ninja)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: sghl-backend
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: .
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    releaseCommand: python manage.py migrate --noinput && python manage.py seed_sghl_demo
+    startCommand: gunicorn sghl_backend.wsgi:application --bind 0.0.0.0:$PORT --workers 2
+    healthCheckPath: /api/v2/docs
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sghl-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: SHOW_MFA_CODE_IN_CONSOLE
+        value: "False"
+      - key: USE_WHITENOISE
+        value: "True"
+      - key: ALLOWED_HOSTS
+        fromService:
+          type: web
+          name: sghl-backend
+          property: host
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: sghl-frontend
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: DEFAULT_FROM_EMAIL
+        value: sghl-notification@hopital.com
+
+  # ---------------------------------------------------------------------------
+  # Frontend Vue 3 (Static Site)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: sghl-frontend
+    runtime: static
+    plan: free
+    region: frankfurt
+    rootDir: sghl_frontend
+    buildCommand: bash ./build-render.sh
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: sghl-backend
+          envVarKey: RENDER_EXTERNAL_URL
