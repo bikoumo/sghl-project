@@ -124,6 +124,31 @@ def get_my_appointments(request):
     appointments = Appointment.objects.filter(doctor=user) if user.role == "DOCTOR" else Appointment.objects.filter(patient=user)
     return [{"id": a.id, "patient_username": a.patient.username, "doctor_username": a.doctor.username, "appointment_date": a.appointment_date, "reason": a.reason, "status": a.status, "created_at": a.created_at} for a in appointments]
 
+@router.get("/appointments/", auth=RoleBasedAuth(allowed_roles=["DG", "SECRETARY_GENERAL", "SECRETARY_SERVICE", "DOCTOR", "PATIENT", "BIOLOGIST"]))
+def list_appointments_json(request):
+    user = request.auth_user
+    appointments_qs = Appointment.objects.select_related("patient", "doctor", "service").order_by("-appointment_date")
+
+    if user.role == "DOCTOR":
+        appointments_qs = appointments_qs.filter(doctor=user)
+    elif user.role == "PATIENT":
+        appointments_qs = appointments_qs.filter(patient=user)
+    elif user.role == "SECRETARY_SERVICE" and user.service_id:
+        appointments_qs = appointments_qs.filter(service=user.service)
+
+    appointments = []
+    for appointment in appointments_qs:
+        appointments.append({
+            "id": appointment.id,
+            "patient__username": appointment.patient.username,
+            "doctor__username": appointment.doctor.username,
+            "appointment_date": appointment.appointment_date.isoformat(),
+            "status": appointment.status,
+            "service__name": appointment.service.name if appointment.service else None,
+        })
+
+    return {"appointments": appointments}
+
 @router.post("/invoices/{invoice_id}/pay", auth=RoleBasedAuth(allowed_roles=["RECEPCIONIST", "ADMIN"]))
 def mark_invoice_as_paid(request, invoice_id: int):
     invoice = get_object_or_404(Invoice, id=invoice_id)

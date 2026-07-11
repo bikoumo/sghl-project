@@ -1,71 +1,84 @@
 <template>
   <AppLayout>
-    <div class="min-h-screen bg-slate-50">
-      <div class="bg-white border-b border-slate-200">
-        <div class="max-w-7xl mx-auto px-6 py-8">
-          <div class="flex justify-between items-center gap-4">
+    <div class="space-y-6">
+      <section class="overflow-hidden rounded-[24px] border border-slate-200 bg-gradient-to-br from-[#0b1727] via-[#11263d] to-[#1b3d5f] p-6 text-white shadow-sm">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-300">Tableau de bord</p>
+            <h1 class="mt-2 text-3xl font-bold">Bienvenue {{ userRole }}</h1>
+            <p class="mt-2 max-w-2xl text-sm text-slate-300">Vue synthétique de votre activité, des services concernés et des actions prioritaires à réaliser.</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100 backdrop-blur">
+            <p class="font-semibold text-white">Profil actif</p>
+            <p>{{ roleLabel }}</p>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="loading" class="grid gap-4 md:grid-cols-3">
+        <div v-for="index in 3" :key="index" class="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm animate-pulse">
+          <div class="h-4 w-24 rounded bg-slate-200"></div>
+          <div class="mt-4 h-8 w-16 rounded bg-slate-200"></div>
+          <div class="mt-3 h-3 w-32 rounded bg-slate-200"></div>
+        </div>
+      </div>
+
+      <div v-else class="grid gap-4 md:grid-cols-3">
+        <div v-for="card in summaryCards" :key="card.label" class="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+          <div class="flex items-start justify-between gap-3">
             <div>
-              <h1 class="text-3xl font-bold text-slate-900">Tableau de Bord 🏥</h1>
-              <p class="text-slate-600 mt-1">Bienvenue {{ userRole }} • SGHL</p>
+              <p class="text-sm font-medium text-slate-500">{{ card.label }}</p>
+              <p class="mt-3 text-3xl font-semibold text-slate-900">{{ card.value }}</p>
+              <p class="mt-2 text-xs text-slate-500">{{ card.helper }}</p>
             </div>
-            <div class="text-right">
-              <p class="text-sm text-slate-600">Profil actif</p>
-              <p class="font-semibold text-slate-900">{{ roleLabel }}</p>
-            </div>
+            <div :class="card.iconClass" class="rounded-2xl p-3 text-2xl">{{ card.icon }}</div>
           </div>
         </div>
       </div>
 
-      <div class="max-w-7xl mx-auto px-6 py-8">
-        <div v-if="loading" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div v-for="index in 3" :key="index" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-pulse">
-            <div class="h-4 w-24 bg-slate-200 rounded mb-4"></div>
-            <div class="h-8 w-16 bg-slate-200 rounded mb-2"></div>
-            <div class="h-3 w-32 bg-slate-200 rounded"></div>
+      <div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section class="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Accès rapide</h2>
+            <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">À jour</span>
           </div>
-        </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div v-for="action in quickActions" :key="action.label" class="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition duration-200 hover:-translate-y-1 hover:bg-white">
+              <div class="flex items-center gap-3">
+                <div class="rounded-xl bg-white p-2 text-xl shadow-sm">{{ action.icon }}</div>
+                <div>
+                  <h3 class="font-semibold text-slate-900">{{ action.label }}</h3>
+                  <p class="text-sm text-slate-600">{{ action.description }}</p>
+                </div>
+              </div>
+              <router-link :to="action.to" class="mt-4 inline-flex text-sm font-semibold text-emerald-700">Ouvrir →</router-link>
+            </div>
+          </div>
+        </section>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div v-for="card in summaryCards" :key="card.label" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition">
-            <div class="flex justify-between items-start">
+        <section class="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-slate-900">Activités récentes</h2>
+          <div class="mt-4 space-y-3">
+            <div v-for="item in recentItems" :key="item.title" class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 transition hover:bg-white">
+              <div class="rounded-full bg-emerald-100 px-2 py-1 text-sm">•</div>
               <div>
-                <p class="text-slate-600 text-sm font-medium">{{ card.label }}</p>
-                <p class="text-4xl font-bold mt-2" :class="card.valueClass">{{ card.value }}</p>
-                <p class="text-slate-500 text-xs mt-2">{{ card.helper }}</p>
-              </div>
-              <div :class="card.iconClass" class="p-3 rounded-lg">
-                <span class="text-2xl">{{ card.icon }}</span>
+                <p class="text-sm font-semibold text-slate-900">{{ item.title }}</p>
+                <p class="text-sm text-slate-500">{{ item.detail }}</p>
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
-          <h2 class="text-lg font-semibold text-slate-900 mb-4">Vue adaptée à votre rôle</h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div v-for="action in quickActions" :key="action.label" class="rounded-lg border border-slate-200 p-4">
-              <div class="flex items-center gap-3 mb-2">
-                <span class="text-2xl">{{ action.icon }}</span>
-                <h3 class="font-semibold text-slate-900">{{ action.label }}</h3>
-              </div>
-              <p class="text-sm text-slate-600 mb-3">{{ action.description }}</p>
-              <router-link :to="action.to" class="text-sm font-semibold text-blue-600">Ouvrir</router-link>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div class="flex items-start gap-4">
-            <span class="text-2xl">ℹ️</span>
-            <div>
-              <h3 class="font-semibold text-blue-900 mb-1">Accès service et communication</h3>
-              <p class="text-sm text-blue-800">
-                Les données sont filtrées selon votre rôle et votre service. Pour les urgences, utilisez le canal de chat interne et gardez les informations à jour en temps réel.
-              </p>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
+
+      <section class="rounded-[24px] border border-slate-200 bg-[#eef5ff] p-6 shadow-sm">
+        <div class="flex items-start gap-3">
+          <span class="text-2xl">ℹ️</span>
+          <div>
+            <h3 class="font-semibold text-slate-900">Accès service et communication</h3>
+            <p class="mt-1 text-sm text-slate-700">Les données sont filtrées selon votre rôle et votre service. Pour les urgences, utilisez le canal de chat interne et gardez les informations à jour en temps réel.</p>
+          </div>
+        </div>
+      </section>
     </div>
   </AppLayout>
 </template>
@@ -167,6 +180,26 @@ const quickActions = computed(() => {
   ];
 });
 
+const recentItems = computed(() => {
+  const role = (userData.value.role || '').toUpperCase();
+  if (role === 'DOCTOR') {
+    return [
+      { title: 'Consultation à venir', detail: '2 patients attendus aujourd’hui.' },
+      { title: 'Urgence active', detail: 'Un message prioritaire a été reçu.' }
+    ];
+  }
+  if (role === 'PATIENT') {
+    return [
+      { title: 'Rendez-vous confirmé', detail: 'Votre prochain passage est programmé.' },
+      { title: 'Dossier médical', detail: 'Les derniers résultats sont disponibles.' }
+    ];
+  }
+  return [
+    { title: 'Planning du service', detail: 'Les rendez-vous du jour sont visibles.' },
+    { title: 'Communication interne', detail: 'Les messages urgents sont traités rapidement.' }
+  ];
+});
+
 const fetchStats = async () => {
   loading.value = true;
   try {
@@ -186,9 +219,6 @@ onMounted(() => {
     return;
   }
   fetchStats();
-});
-
-onMounted(() => {
   const interval = setInterval(fetchStats, 30000);
   return () => clearInterval(interval);
 });

@@ -9,6 +9,9 @@ from clinical.models import (
     Appointment,
     Bed,
     Building,
+    ExamRequest,
+    ExamResult,
+    Invoice,
     Provision,
     Room,
     Service,
@@ -203,33 +206,84 @@ class Command(BaseCommand):
         return users
 
     def _seed_clinical_data(self, users, services):
+        User = get_user_model()
         doctor = users["doctor_demo"]
         patient = users["patient_demo"]
-        slot_morning = timezone.now() + timedelta(hours=3)
-        slot_midday = timezone.now() + timedelta(hours=5)
+        secretary = users["secretary_demo"]
 
-        Appointment.objects.get_or_create(
-            patient=patient,
-            doctor=doctor,
-            appointment_date=slot_morning,
+        appointment_slots = [
+            (patient, doctor, timezone.now() + timedelta(hours=3), "CONFIRMED", services["PED"]),
+            (patient, doctor, timezone.now() + timedelta(hours=5), "SCHEDULED", services["PED"]),
+            (patient, doctor, timezone.now() + timedelta(days=1, hours=2), "SCHEDULED", services["URG"]),
+            (patient, doctor, timezone.now() + timedelta(days=1, hours=4), "CONFIRMED", services["PED"]),
+            (patient, doctor, timezone.now() + timedelta(days=2, hours=1), "SCHEDULED", services["LAB"]),
+        ]
+
+        for patient_user, doctor_user, slot, status, service in appointment_slots:
+            Appointment.objects.get_or_create(
+                patient=patient_user,
+                doctor=doctor_user,
+                appointment_date=slot,
+                defaults={
+                    "status": status,
+                    "service": service,
+                    "created_by": doctor_user,
+                },
+            )
+
+        extra_patients = []
+        for username, email, first_name, last_name in [
+            ('patient_demo_2', 'patient2@sghl.com', 'Aude', 'Mouanda'),
+            ('patient_demo_3', 'patient3@sghl.com', 'Rodolphe', 'Dienga'),
+        ]:
+            patient_user, _ = User.objects.get_or_create(
+                username=username,
+                defaults={
+                    'email': email,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'role': 'PATIENT',
+                    'is_active': True,
+                },
+            )
+            patient_user.set_password(self.DEMO_PASSWORD)
+            patient_user.save(update_fields=['password'])
+            extra_patients.append(patient_user)
+
+        invoice_specs = [
+            (patient, 35000, 'PAID'),
+            (extra_patients[0], 18000, 'PENDING'),
+            (extra_patients[1], 22000, 'PENDING'),
+            (patient, 25000, 'PAID'),
+        ]
+        for patient_user, amount, status in invoice_specs:
+            Invoice.objects.get_or_create(
+                patient=patient_user,
+                defaults={
+                    'total_amount': amount,
+                    'status': status,
+                },
+            )
+
+        ExamRequest.objects.get_or_create(
+            title='Analyse de sang standard',
             defaults={
-                "status": "CONFIRMED",
-                "service": services["PED"],
-                "created_by": doctor,
+                "patient": patient,
+                "requested_by": doctor,
+                "description": 'Bilan biologique pour contrôle général',
+                "status": 'IN_PROGRESS',
             },
         )
-        Appointment.objects.get_or_create(
-            patient=patient,
-            doctor=doctor,
-            appointment_date=slot_midday,
-            defaults={
-                "status": "CONFIRMED",
-                "service": services["PED"],
-                "created_by": doctor,
-            },
-        )
+        exam_request = ExamRequest.objects.filter(title='Analyse de sang standard').first()
+        if exam_request and not hasattr(exam_request, 'result'):
+            ExamResult.objects.create(
+                exam_request=exam_request,
+                performed_by=doctor,
+                result_text='Globules rouges et plaquettes normales',
+                conclusion='Aucune anomalie détectée',
+            )
 
-        self.stdout.write(self.style.SUCCESS("Rendez-vous de demo planifies pour le dashboard medecin."))
+        self.stdout.write(self.style.SUCCESS("Données clinique de demo enrichies (RDV, patients, factures, urgence et labo)."))
 
     def _seed_messages(self, users, services):
         doctor = users["doctor_demo"]

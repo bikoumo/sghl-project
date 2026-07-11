@@ -18,6 +18,10 @@ class User(AbstractUser):
     service = models.ForeignKey('clinical.Service', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     phone = models.CharField(max_length=20, blank=True, null=True)
     is_mfa_enabled = models.BooleanField(default=True)
+    profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True)
+    groupe_sanguin = models.CharField(max_length=10, blank=True, null=True)
+    allergies = models.TextField(blank=True, null=True)
+    antecedents = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"

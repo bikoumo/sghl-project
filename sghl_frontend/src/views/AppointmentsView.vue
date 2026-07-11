@@ -1,108 +1,69 @@
 <template>
   <AppLayout>
-    <div class="p-6 space-y-6">
-      <!-- Header -->
-      <header class="flex justify-between items-center">
+    <div class="space-y-6">
+      <header class="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 class="text-3xl font-bold text-slate-900">📅 Gestion des Rendez-vous</h1>
-          <p class="text-slate-600 mt-1">Planification et gestion des consultations médicales</p>
+          <p class="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-600">Gestion</p>
+          <h1 class="mt-2 text-3xl font-bold text-slate-900">Rendez-vous</h1>
+          <p class="mt-1 text-slate-600">Planification et suivi des consultations médicales.</p>
         </div>
-        <button @click="showAddModal = true" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg font-semibold transition shadow-sm">
-          ＋ Nouveau Rendez-vous
+        <button @click="showAddModal = true" class="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-700 hover:shadow-lg">
+          <span class="mr-2">＋</span> Nouveau rendez-vous
         </button>
       </header>
 
-      <!-- Info Banner -->
-      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-4">
-        <span class="text-2xl flex-shrink-0">ℹ️</span>
-        <div>
-          <p class="text-blue-900 font-medium">Validations Métier</p>
-          <p class="text-blue-800 text-sm">
-            • Les rendez-vous ne peuvent être pris moins de 2 heures avant
-            • Maximum 10 rendez-vous par jour
-            • Les erreurs seront affichées ci-dessous
-          </p>
+      <div class="grid gap-4 md:grid-cols-3">
+        <div v-for="stat in summaryStats" :key="stat.label" class="rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-md">
+          <p class="text-sm text-slate-500">{{ stat.label }}</p>
+          <p class="mt-3 text-3xl font-semibold text-slate-900">{{ stat.value }}</p>
         </div>
       </div>
 
-      <!-- Error Alert -->
-      <div v-if="errorMessage" class="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-4">
-        <span class="text-2xl flex-shrink-0">❌</span>
-        <div class="flex-1">
-          <p class="text-red-900 font-medium">Erreur d'enregistrement</p>
-          <p class="text-red-800 text-sm whitespace-pre-wrap">{{ errorMessage }}</p>
+      <div class="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div class="mb-4 rounded-2xl bg-blue-50 border border-blue-200 p-4 text-sm text-blue-800">
+          <p class="font-semibold">Validations métier</p>
+          <p class="mt-1">• Les rendez-vous ne peuvent être pris moins de 2 heures avant • Maximum 10 rendez-vous par jour • Les erreurs sont affichées ci-dessous.</p>
         </div>
-        <button @click="errorMessage = ''" class="text-red-600 hover:text-red-800">
-          <span class="text-xl">✕</span>
-        </button>
-      </div>
 
-      <!-- Success Alert -->
-      <div v-if="successMessage" class="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-4">
-        <span class="text-2xl flex-shrink-0">✅</span>
-        <div class="flex-1">
-          <p class="text-emerald-900 font-medium">Succès</p>
-          <p class="text-emerald-800 text-sm">{{ successMessage }}</p>
+        <div v-if="errorMessage" class="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{{ errorMessage }}</div>
+        <div v-if="successMessage" class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{{ successMessage }}</div>
+
+        <div v-if="loading" class="rounded-2xl border border-slate-200 p-8 text-center text-slate-600">⏳ Chargement des rendez-vous...</div>
+
+        <div v-else class="overflow-hidden rounded-2xl border border-slate-200">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                <th class="px-5 py-4">Patient</th>
+                <th class="px-5 py-4">Médecin</th>
+                <th class="px-5 py-4">Date & Heure</th>
+                <th class="px-5 py-4">Service</th>
+                <th class="px-5 py-4">Statut</th>
+                <th class="px-5 py-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="appt in appointments" :key="appt.id" class="border-t border-slate-100 transition hover:bg-slate-50">
+                <td class="px-5 py-4 font-medium text-slate-900">{{ appt.patient__username }}</td>
+                <td class="px-5 py-4 text-slate-700">{{ appt.doctor__username }}</td>
+                <td class="px-5 py-4 text-slate-700">{{ formatDateTime(appt.appointment_date) }}</td>
+                <td class="px-5 py-4 text-slate-700">{{ appt.service__name || 'N/A' }}</td>
+                <td class="px-5 py-4">
+                  <span :class="getStatusBadgeClass(appt.status)" class="rounded-full px-3 py-1 text-xs font-semibold">{{ getStatusLabel(appt.status) }}</span>
+                </td>
+                <td class="px-5 py-4">
+                  <div class="flex gap-2">
+                    <button @click="updateStatus(appt.id, 'CONFIRMED')" v-if="appt.status === 'SCHEDULED'" class="text-sm font-medium text-emerald-600 hover:text-emerald-800">✓ Confirmer</button>
+                    <button @click="cancelAppointment(appt.id)" v-if="appt.status !== 'CANCELLED' && appt.status !== 'COMPLETED'" class="text-sm font-medium text-red-600 hover:text-red-800">✕ Annuler</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="appointments.length === 0">
+                <td colspan="6" class="px-5 py-8 text-center text-slate-600">📭 Aucun rendez-vous trouvé</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <button @click="successMessage = ''" class="text-emerald-600 hover:text-emerald-800">
-          <span class="text-xl">✕</span>
-        </button>
-      </div>
-
-      <!-- Loading State -->
-      <div v-if="loading" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
-        <p class="text-slate-600">⏳ Chargement des rendez-vous...</p>
-      </div>
-
-      <!-- Appointments Table -->
-      <div v-else class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table class="w-full text-left">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Patient</th>
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Médecin</th>
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Date & Heure</th>
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Service</th>
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Statut</th>
-              <th class="px-6 py-4 text-xs font-semibold text-slate-700 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="appt in appointments" :key="appt.id" class="border-b border-slate-100 hover:bg-slate-50 transition">
-              <td class="px-6 py-4 font-medium text-slate-900">{{ appt.patient__username }}</td>
-              <td class="px-6 py-4 text-slate-700">{{ appt.doctor__username }}</td>
-              <td class="px-6 py-4 text-slate-700">
-                {{ formatDateTime(appt.appointment_date) }}
-              </td>
-              <td class="px-6 py-4 text-slate-700">{{ appt.service__name || 'N/A' }}</td>
-              <td class="px-6 py-4">
-                <span :class="getStatusBadgeClass(appt.status)" class="px-3 py-1 rounded-full text-xs font-semibold">
-                  {{ getStatusLabel(appt.status) }}
-                </span>
-              </td>
-              <td class="px-6 py-4">
-                <div class="flex gap-2">
-                  <button @click="updateStatus(appt.id, 'CONFIRMED')" 
-                          v-if="appt.status === 'SCHEDULED'"
-                          class="text-emerald-600 hover:text-emerald-800 text-sm font-medium">
-                    ✓ Confirmer
-                  </button>
-                  <button @click="cancelAppointment(appt.id)" 
-                          v-if="appt.status !== 'CANCELLED' && appt.status !== 'COMPLETED'"
-                          class="text-red-600 hover:text-red-800 text-sm font-medium">
-                    ✕ Annuler
-                  </button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="appointments.length === 0">
-              <td colspan="6" class="px-6 py-8 text-center text-slate-600">
-                <span class="text-2xl block mb-2">📭</span>
-                Aucun rendez-vous trouvé
-              </td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       <!-- Modal -->
@@ -164,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import AppLayout from '@/components/AppLayout.vue';
 import api from '@/api';
 
@@ -180,6 +141,12 @@ const newAppt = ref({
   appointment_date: '',
   service_id: ''
 });
+
+const summaryStats = computed(() => [
+  { label: 'Total', value: appointments.value.length },
+  { label: 'Confirmés', value: appointments.value.filter((item) => item.status === 'CONFIRMED').length },
+  { label: 'En attente', value: appointments.value.filter((item) => item.status === 'SCHEDULED').length }
+]);
 
 const formatDateTime = (dateStr) => {
   try {
@@ -217,7 +184,17 @@ const fetchAppointments = async () => {
   loading.value = true;
   try {
     const response = await api.instance.get('/clinical/appointments/');
-    appointments.value = response.data.appointments || [];
+    const payload = response.data || {};
+
+    if (Array.isArray(payload)) {
+      appointments.value = payload;
+    } else if (Array.isArray(payload.appointments)) {
+      appointments.value = payload.appointments;
+    } else if (Array.isArray(payload.results)) {
+      appointments.value = payload.results;
+    } else {
+      appointments.value = [];
+    }
   } catch (error) {
     errorMessage.value = 'Erreur lors du chargement des rendez-vous.';
     console.error('Erreur:', error);

@@ -1,20 +1,43 @@
 <template>
-  <div class="flex h-screen bg-slate-50">
-    <aside class="w-64 bg-slate-900 text-white shadow-lg">
-      <div class="p-6 text-xl font-bold text-emerald-500">SGHL Portal</div>
-      <p class="px-6 text-sm text-slate-400">{{ roleLabel }}</p>
-      <nav class="mt-6">
-        <router-link :to="dashboardRoute" class="block py-3 px-6 hover:bg-slate-800 border-l-4 border-transparent hover:border-emerald-500">Tableau de bord</router-link>
-        <router-link to="/appointments" class="block py-3 px-6 hover:bg-slate-800 border-l-4 border-transparent hover:border-emerald-500">Rendez-vous</router-link>
-        <router-link to="/chat" class="block py-3 px-6 hover:bg-slate-800 border-l-4 border-transparent hover:border-emerald-500">Chat interne</router-link>
-        <router-link to="/profile" class="block py-3 px-6 hover:bg-slate-800 border-l-4 border-transparent hover:border-emerald-500">Profil</router-link>
+  <div class="flex h-screen bg-[#f4f6fb]">
+    <aside class="flex w-72 flex-col bg-[#0b1727] text-white shadow-2xl">
+      <div class="border-b border-white/10 px-6 py-6">
+        <div class="flex items-center gap-3">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 text-xl shadow-inner text-emerald-400">🏥</div>
+          <div>
+            <p class="text-lg font-semibold">SGHL Portal</p>
+            <p class="text-sm text-slate-400">{{ roleLabel }}</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="mt-6 flex-1 space-y-1 px-3">
+        <router-link :to="dashboardRoute" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">📊</span>
+          <span>Tableau de bord</span>
+        </router-link>
+        <router-link to="/appointments" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">📅</span>
+          <span>Rendez-vous</span>
+        </router-link>
+        <router-link to="/chat" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">💬</span>
+          <span>Chat interne</span>
+        </router-link>
+        <router-link to="/profile" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">👤</span>
+          <span>Profil</span>
+        </router-link>
       </nav>
-      <div class="px-6 mt-8">
-        <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500" @click="logout">Déconnexion</button>
+
+      <div class="border-t border-white/10 p-4">
+        <button class="group w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500" @click="logout">
+          <span class="mr-2 transition group-hover:translate-x-0.5">↪</span> Déconnexion
+        </button>
       </div>
     </aside>
 
-    <main class="flex-1 p-8 overflow-y-auto">
+    <main class="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.08),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#f4f6fb_100%)] p-6 lg:p-8">
       <slot />
     </main>
   </div>

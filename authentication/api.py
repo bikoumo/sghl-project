@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.utils import timezone
 from django.core.cache import cache
 from django.db.models import Q
+from django.db.models import Count
 import random
 from ninja.errors import HttpError
 from authentication.security import RoleBasedAuth, signer
@@ -241,6 +242,48 @@ def create_chat_message(request, payload: ChatMessageCreateSchema):
         "content": message.content,
         "is_urgent": message.is_urgent,
         "created_at": message.created_at,
+    }
+
+
+@router.get("/profile/summary/", auth=RoleBasedAuth(allowed_roles=["DG", "SECRETARY_GENERAL", "SECRETARY_SERVICE", "DOCTOR", "BIOLOGIST", "PATIENT"]))
+def get_profile_summary(request):
+    user = request.auth_user
+
+    patient_count = User.objects.filter(role='PATIENT').count()
+    doctor_count = User.objects.filter(role='DOCTOR').count()
+    active_urgent_count = 0
+    pending_invoice_count = 0
+
+    if user.role == 'DOCTOR':
+        patient_count = User.objects.filter(role='PATIENT').count()
+        active_urgent_count = 1
+        pending_invoice_count = 0
+    elif user.role == 'PATIENT':
+        pending_invoice_count = 0
+    elif user.role in ['SECRETARY_SERVICE', 'SECRETARY_GENERAL', 'DG']:
+        pending_invoice_count = 2
+        active_urgent_count = 1
+
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": f"{user.first_name} {user.last_name}".strip() or user.username,
+            "role": user.role,
+            "service": getattr(user.service, 'name', None),
+            "phone": user.phone,
+            "groupe_sanguin": user.groupe_sanguin,
+            "allergies": user.allergies,
+            "antecedents": user.antecedents,
+            "has_picture": bool(user.profile_picture),
+        },
+        "kpis": {
+            "patients": patient_count,
+            "doctors": doctor_count,
+            "urgencies": active_urgent_count,
+            "pending_invoices": pending_invoice_count,
+        },
     }
 
 

@@ -151,6 +151,30 @@ class Invoice(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
 
+class ExamRequest(models.Model):
+    STATUS_CHOICES = [('PENDING', 'En attente'), ('IN_PROGRESS', 'En cours'), ('COMPLETED', 'Terminé')]
+    patient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='exam_requests', limit_choices_to={'role': 'PATIENT'})
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='exam_requests_created')
+    title = models.CharField(max_length=150)
+    description = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.patient.username}"
+
+class ExamResult(models.Model):
+    exam_request = models.OneToOneField(ExamRequest, on_delete=models.CASCADE, related_name='result')
+    performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='exam_results_performed')
+    result_text = models.TextField(blank=True, null=True)
+    conclusion = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Résultat pour {self.exam_request.title}"
+
 class Payment(models.Model):
     PAYMENT_METHODS = [('CASH', 'Espèces'), ('MOBILE', 'Mobile Money'), ('CARD', 'Carte Bancaire')]
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
