@@ -1,0 +1,46 @@
+
+
+
+"Pour tester techniquement l'envoi réel des e-mails et du MFA, je vais utiliser ma propre adresse e-mail réelle pour tous les comptes de test, afin de recevoir tous les codes OTP dans ma boîte de réception.
+
+Peux-tu me générer un script de données de test Django (un fichier de fixture ou un script create_test_users.py) pour créer ou mettre à jour mes utilisateurs de test dans PostgreSQL avec la logique suivante :
+
+Un utilisateur avec le rôle ADMIN (Email: ton_adresse+admin@gmail.com)
+
+Un utilisateur avec le rôle DOCTOR (Email: ton_adresse+doctor@gmail.com)
+
+Un utilisateur avec le rôle SECRETARY (Email: ton_adresse+secretary@gmail.com)
+
+Un utilisateur avec le rôle FINANCE (Email: ton_adresse+finance@gmail.com)
+
+Assure-toi que lorsque je me connecte avec l'un de ces comptes sur mon frontend Vue.js, le backend Django envoie bien le code OTP à cette adresse spécifique et m'oriente vers le bon tableau de bord du Parcours Ordonné."
+
+
+
+
+
+
+
+
+
+
+
+Mon projet SGHL arrive en phase de finalisation. Pour que mon dossier de rendu soit conforme aux attentes de mon professeur, j'ai besoin que tu effectues les actions suivantes :
+
+Mise à jour des dépendances : Comme nous ajoutons de nouveaux modules (Géolocalisation, QR Code, gestion des rôles, etc.), je te demande de mettre à jour mon fichier require.txt. Assure-toi qu'il contient toutes les bibliothèques nécessaires à la nouvelle version de l'application afin qu'elle soit parfaitement fonctionnelle lors de l'installation sur une autre machine.
+
+Hébergement sur Render : Finalise le déploiement sur Render. Vérifie que toutes les routes sont accessibles et que la connexion à ma base de données PostgreSQL est stable et opérationnelle.
+
+Guide Utilisateur (PDF) : Rédige le contenu structuré pour mon guide de fonctionnement. Il doit inclure :
+
+Une présentation générale du système.
+
+Un tutoriel pas à pas de connexion pour chaque rôle (Admin, Docteur, Secrétaire, Comptable).
+
+L'explication des fonctionnalités clés (parcours patient, gestion des urgences, facturation, géolocalisation, gestion des décès).
+
+Dossier de Rendu (Zip) : Prépare mon dossier de projet pour qu'il soit propre et prêt à être zippé :
+
+Supprime les fichiers temporaires et inutiles (logs, caches, environnements virtuels).
+
+Assure-toi que le fichier README.md explique clairement au professeur comment installer le projet en utilisant le fichier require.txt et commsent lancer l'application en local."

@@ -11,28 +11,51 @@
         </div>
       </div>
 
-      <nav class="mt-6 flex-1 space-y-1 px-3">
+      <nav class="mt-6 flex-1 space-y-1 px-3 overflow-y-auto">
         <router-link :to="dashboardRoute" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">📊</span>
-          <span>Tableau de bord</span>
+          <span>📊</span> Table de bord
         </router-link>
+
+        <div v-if="isAdmin" class="mt-4 px-4 text-[10px] font-bold uppercase text-slate-500 tracking-wider">Gestion Globale</div>
+        
+        <router-link v-if="isAdmin" to="/patients" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span>📁</span> Dossiers Patients
+        </router-link>
+        <router-link v-if="isAdmin" to="/laboratory" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span>🧪</span> Laboratoire
+        </router-link>
+        <router-link v-if="isAdmin" to="/pharmacy" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span>💊</span> Pharmacie & Stocks
+        </router-link>
+        <router-link v-if="isAdmin" to="/payments" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span>💳</span> Facturation & Paiements
+        </router-link>
+        <router-link v-if="isAdmin" to="/visitors" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+          <span>📍</span> Localisation Visites
+        </router-link>
+        <router-link v-if="isAdmin" to="/pediatrie" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+        <span>👶</span> Pédiatrie
+        </router-link>
+        <router-link v-if="isAdmin" to="/staff" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
+        <span>👥</span> Gestion du Staff
+        </router-link>
+
+
+        <div class="mt-4 px-4 text-[10px] font-bold uppercase text-slate-500 tracking-wider">Communication</div>
         <router-link to="/appointments" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">📅</span>
-          <span>Rendez-vous</span>
+          <span>📅</span> Rendez-vous
         </router-link>
         <router-link to="/chat" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">💬</span>
-          <span>Chat interne</span>
+          <span>💬</span> Chat interne
         </router-link>
         <router-link to="/profile" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white" active-class="bg-emerald-500/15 text-white shadow-sm">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-sm transition group-hover:scale-105">👤</span>
-          <span>Profil</span>
+          <span>👤</span> Profil
         </router-link>
       </nav>
 
       <div class="border-t border-white/10 p-4">
         <button class="group w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500" @click="logout">
-          <span class="mr-2 transition group-hover:translate-x-0.5">↪</span> Déconnexion
+          ↪ Déconnexion
         </button>
       </div>
     </aside>
@@ -48,23 +71,21 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
-
 const userData = computed(() => JSON.parse(localStorage.getItem('user') || '{}'));
+
+// Détection Admin
+const isAdmin = computed(() => userData.value.role === 'ADMIN');
+
 const roleLabel = computed(() => {
   const role = (userData.value.role || '').toUpperCase();
-  if (role === 'DOCTOR') return 'Médecin';
-  if (role === 'PATIENT') return 'Patient';
-  if (role === 'SECRETARY' || role === 'SECRETARY_GENERAL' || role === 'SECRETARY_SERVICE') return 'Secrétaire';
-  if (role === 'ADMIN') return 'Administrateur';
-  return 'Utilisateur';
+  if (role === 'ADMIN') return 'Super Administrateur';
+  return role;
 });
 
 const dashboardRoute = computed(() => {
   const role = (userData.value.role || '').toUpperCase();
-  if (role === 'DOCTOR') return '/dashboard/doctor';
   if (role === 'ADMIN') return '/dashboard/admin';
-  if (role === 'SECRETARY' || role === 'SECRETARY_GENERAL' || role === 'SECRETARY_SERVICE') return '/dashboard/secretary';
-  return '/dashboard/patient';
+  return '/dashboard';
 });
 
 const logout = () => {
