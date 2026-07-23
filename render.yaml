@@ -8,7 +8,7 @@ databases:
     plan: free
     databaseName: sghl
     user: sghl
-    region: frankfurt
+    
 
 services:
   # ---------------------------------------------------------------------------
@@ -20,8 +20,8 @@ services:
     plan: free
     region: frankfurt
     rootDir: .
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    preDeployCommand: python manage.py migrate --noinput && python manage.py seed_sghl_demo
+    buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
+    
     startCommand: gunicorn sghl_backend.wsgi:application --bind 0.0.0.0:$PORT --workers 2
     healthCheckPath: /api/v2/docs
     envVars:
