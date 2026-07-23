@@ -1,15 +1,16 @@
 import axios from 'axios'
+import { getApiBaseUrl } from './apiBase'
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v2'
+const apiBaseUrl = getApiBaseUrl()
 
 const api = axios.create({
   baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
-  }
+  },
 })
 
-api.interceptors.request.use(config => {
+api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -17,10 +18,33 @@ api.interceptors.request.use(config => {
   return config
 })
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.assign('/login?force=1')
+      }
+    }
+    return Promise.reject(error)
+  },
+)
+
+export async function downloadAuthenticatedFile(url, filename) {
+  const response = await api.get(url, { responseType: 'blob' })
+  const blob = new Blob([response.data])
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
 export default {
   instance: api,
 
-  // Authentification : Appel direct sur /api/v1/auth/...
   login(credentials) {
     return api.post('/auth/login/', credentials)
   },
@@ -29,17 +53,35 @@ export default {
     return api.post('/auth/verify-mfa/', data)
   },
 
-  // Module Clinique : Préfixé par /clinical/ comme attendu
+  resendMfa(data) {
+    return api.post('/auth/resend-mfa/', data)
+  },
+
   getPatients() {
     return api.get('/clinical/patients/')
   },
 
-  // Gestion des factures
   getInvoices() {
-    return api.get('/finance/invoices/') 
+    return api.get('/clinical/invoices/')
   },
 
   addPayment(invoiceId, data) {
-    return api.post(`/finance/invoices/${invoiceId}/add-payment/`, data)
-  }
+    return api.post(`/clinical/invoices/${invoiceId}/pay`, data)
+  },
+
+  exportInvoicesCsv() {
+    return downloadAuthenticatedFile('/clinical/invoices/export', 'factures_sghl.csv')
+  },
+
+  exportStaffCsv() {
+    return downloadAuthenticatedFile('/finance/staff/export', 'personnel_sghl.csv')
+  },
+
+  searchPatients(query) {
+    return api.get(`/clinical/patients/search`, { params: { q: query } })
+  },
+
+  createInvoice(data) {
+    return api.post('/clinical/invoices/create', data)
+  },
 }

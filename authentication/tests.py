@@ -47,6 +47,12 @@ class LoginTests(TestCase):
         payload = response.json()
         self.assertTrue(payload['requires_mfa'])
         self.assertEqual(payload['username'], 'doctor1')
+        # Sans credentials SMTP : fallback UI avec le code à 6 chiffres
+        self.assertFalse(payload.get('email_sent'))
+        self.assertIsNotNone(payload.get('fallback_code'))
+        self.assertEqual(len(payload['fallback_code']), 6)
+        self.assertTrue(payload['fallback_code'].isdigit())
+        self.assertEqual(payload['message'], 'Code généré')
 
     def test_login_returns_token_when_mfa_disabled(self):
         self.user.is_mfa_enabled = False

@@ -84,15 +84,23 @@ class Hospitalization(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        if self.pk is None and self.bed.is_occupied:
+        if self.pk is None and self.bed_id and self.bed.is_occupied:
             raise ValidationError(f"Opération impossible : Le {self.bed} est déjà occupé.")
 
     def save(self, *args, **kwargs):
         self.full_clean()
         if self.pk is None:
             self.bed.is_occupied = True
-            self.bed.save()
+            self.bed.save(update_fields=['is_occupied', 'updated_at'])
         super().save(*args, **kwargs)
+
+    def discharge(self):
+        """Libère le lit et clôture l'hospitalisation active."""
+        if not self.is_active:
+            return
+        self.is_active = False
+        self.save(update_fields=['is_active', 'updated_at'])
+        Bed.objects.filter(pk=self.bed_id, is_occupied=True).update(is_occupied=False)
 
 # ==========================================
 # 3. Logistique & Support (Avec traçabilité)
@@ -149,7 +157,15 @@ class Invoice(models.Model):
     consultation = models.OneToOneField('Consultation', on_delete=models.CASCADE, null=True, blank=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    label = models.CharField(max_length=120, blank=True, default='Consultation')
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def amount_paid(self):
+        return self.payments.aggregate(total=Sum('amount'))['total'] or 0
+
+    def remaining_amount(self):
+        return self.total_amount - self.amount_paid()
+
 
 class ExamRequest(models.Model):
     STATUS_CHOICES = [('PENDING', 'En attente'), ('IN_PROGRESS', 'En cours'), ('COMPLETED', 'Terminé')]
@@ -164,6 +180,7 @@ class ExamRequest(models.Model):
     def __str__(self):
         return f"{self.title} - {self.patient.username}"
 
+
 class ExamResult(models.Model):
     exam_request = models.OneToOneField(ExamRequest, on_delete=models.CASCADE, related_name='result')
     performed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='exam_results_performed')
@@ -175,19 +192,57 @@ class ExamResult(models.Model):
     def __str__(self):
         return f"Résultat pour {self.exam_request.title}"
 
+
 class Payment(models.Model):
-    PAYMENT_METHODS = [('CASH', 'Espèces'), ('MOBILE', 'Mobile Money'), ('CARD', 'Carte Bancaire')]
+    PAYMENT_METHODS = [
+        ('CASH', 'Paiement sur place (espèces)'),
+        ('MTN', 'MTN Mobile Money'),
+        ('AIRTEL', 'Airtel Money'),
+        ('CARD', 'Carte bancaire'),
+    ]
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    card_last_four = models.CharField(max_length=4, blank=True, null=True, help_text="4 derniers chiffres de la carte bancaire")
+    card_expiry = models.CharField(max_length=5, blank=True, null=True, help_text="Date d'expiration MM/AA")
+    transaction_ref = models.CharField(max_length=64, blank=True, null=True)
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments_made',
+    )
     date = models.DateTimeField(auto_now_add=True)
-    
+
     def clean(self):
-        total_already_paid = self.invoice.payments.exclude(pk=self.pk).aggregate(Sum('amount'))['amount__sum'] or 0
+        if not self.invoice_id:
+            return
+        total_already_paid = (
+            self.invoice.payments.exclude(pk=self.pk).aggregate(Sum('amount'))['amount__sum'] or 0
+        )
         remaining = self.invoice.total_amount - total_already_paid
         if self.amount > remaining:
-            raise ValidationError(f"Paiement refusé : Montant insuffisant ou solde dépassé.")
-        super().save()
+            raise ValidationError(
+                f"Paiement refusé : montant supérieur au solde restant ({remaining})."
+            )
+        if self.method in {'MTN', 'AIRTEL'} and not (self.phone or '').strip():
+            raise ValidationError("Le numéro de téléphone est obligatoire pour MTN / Airtel Money.")
+        if self.method == 'CARD':
+            if not self.card_last_four or len(self.card_last_four) != 4 or not self.card_last_four.isdigit():
+                raise ValidationError("Les 4 derniers chiffres de la carte sont obligatoires.")
+            if not self.card_expiry or len(self.card_expiry) != 5:
+                raise ValidationError("La date d'expiration (MM/AA) est obligatoire.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        paid = self.invoice.amount_paid()
+        if paid >= self.invoice.total_amount:
+            self.invoice.status = 'PAID'
+            self.invoice.save(update_fields=['status'])
+
 
 # ==========================================
 # 5. GESTION DES RENDEZ-VOUS (Logique mise à jour)
@@ -199,6 +254,7 @@ class Appointment(models.Model):
     appointment_date = models.DateTimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
     service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name='appointments', null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True, default='')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='appointments_created')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -229,3 +285,86 @@ class Appointment(models.Model):
 
     def __str__(self):
         return f"{self.patient.username} - {self.appointment_date}"
+
+
+# ==========================================
+# 6. GESTION DES DÉCÈS ET ARCHIVAGE
+# ==========================================
+class DeathRecord(models.Model):
+    patient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='death_records', limit_choices_to={'role': 'PATIENT'})
+    reported_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='death_reports')
+    service = models.ForeignKey('Service', on_delete=models.SET_NULL, null=True, blank=True, related_name='death_records', help_text="Service où le décès a eu lieu")
+    cause = models.TextField(blank=True, null=True, help_text="Cause principale du décès")
+    complications = models.TextField(blank=True, null=True, help_text="Complications ou détails supplémentaires")
+    validated_at = models.DateTimeField(blank=True, null=True)
+    is_validated = models.BooleanField(default=False)
+    is_dossier_purged = models.BooleanField(default=False, help_text="True après purge automatique (7 jours)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['validated_at', 'is_validated']),
+            models.Index(fields=['service']),
+            models.Index(fields=['cause']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Décès #{self.id} - {self.patient} (validé={self.is_validated})"
+
+
+class ArchivedClinicalRecord(models.Model):
+    original_patient_id = models.IntegerField()
+    original_username = models.CharField(max_length=150, blank=True, default='')
+    original_matricule = models.CharField(max_length=32, blank=True, default='')
+    patient_full_name = models.CharField(max_length=300, blank=True, default='')
+    date_of_death = models.DateTimeField(blank=True, null=True)
+    cause_of_death = models.TextField(blank=True, default='')
+    service_name = models.CharField(max_length=100, blank=True, default='')
+    snapshot = models.JSONField(default=dict, help_text="Copie des données de soins au moment de l'archivage")
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-archived_at']
+
+    def __str__(self):
+        return f"Archivé: {self.patient_full_name or self.original_username} (patient#{self.original_patient_id})"
+
+
+# ==========================================
+# 7. PÉDIATRIE & MATERNITÉ
+# ==========================================
+class PediatricRecord(models.Model):
+    nom = models.CharField(max_length=120)
+    date_naissance = models.DateField()
+    poids = models.DecimalField(max_digits=5, decimal_places=2)
+    taille = models.PositiveIntegerField(null=True, blank=True, help_text="cm")
+    groupe_sanguin = models.CharField(max_length=5, blank=True, default='')
+    vaccin_date = models.DateField()
+    status = models.CharField(max_length=40, default='Suivi actif')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Pédiatrie: {self.nom}"
+
+
+class MaternityRecord(models.Model):
+    nom = models.CharField(max_length=80)
+    prenom = models.CharField(max_length=80)
+    date_terme = models.DateField()
+    next_visit = models.DateField()
+    status = models.CharField(max_length=40, default='Suivi en cours')
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['next_visit']
+
+    def __str__(self):
+        return f"Maternité: {self.nom} {self.prenom}"

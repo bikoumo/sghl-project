@@ -149,14 +149,25 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 AUTH_USER_MODEL = 'authentication.User'
 
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-sghl-cache',
-    }
+    'default': (
+        {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        }
+        if os.environ.get('REDIS_URL')
+        else {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-sghl-cache',
+        }
+    )
 }
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'sghl-notification@hopital.com')
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+# Raccourci .env : EMAIL_BACKEND=smtp → backend Django SMTP
+if EMAIL_BACKEND.strip().lower() in {'smtp', 'django.core.mail.backends.smtp.EmailBackend'}:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
@@ -164,8 +175,18 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '10'))
 
-if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend' and not EMAIL_HOST:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    if not EMAIL_HOST:
+        EMAIL_HOST = 'smtp.gmail.com'
+    # Sans identifiants SMTP, basculer en console pour ne pas bloquer le login
+    if not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+        if DEBUG:
+            print(
+                '[SGHL EMAIL] SMTP demande mais EMAIL_HOST_USER/PASSWORD absents '
+                '-> backend console + fallback OTP dans l UI.',
+                flush=True,
+            )
 
 CORS_ALLOWED_ORIGINS = env_list(
     'CORS_ALLOWED_ORIGINS',
@@ -174,7 +195,25 @@ CORS_ALLOWED_ORIGINS = env_list(
         'http://127.0.0.1:5173',
         'http://localhost:5174',
         'http://127.0.0.1:5174',
+        'http://192.168.100.122:5174',
+        'http://192.168.100.122:5173',
     ],
 )
+# Accès mobile (même Wi‑Fi) : origines LAN autorisées en DEBUG
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^http://192\.168\.\d{1,3}\.\d{1,3}:5174$',
+    r'^http://10\.\d{1,3}\.\d{1,3}\.\d{1,3}:5174$',
+    r'^http://172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}:5174$',
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Tarif de consultation (FCFA) — reçu généré à chaque consultation
+from decimal import Decimal
+CONSULTATION_FEE = Decimal(os.environ.get('CONSULTATION_FEE', '15000'))
+
+# RBAC enforcement middleware (blocks secretary from sensitive clinical endpoints)
+MIDDLEWARE.insert(
+    MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1,
+    'authentication.middleware.RBACMiddleware',
+)

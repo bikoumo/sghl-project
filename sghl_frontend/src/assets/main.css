@@ -3,31 +3,100 @@
 
 #app {
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   font-weight: normal;
+  min-height: 100vh;
 }
 
-body {
-  font-family: Inter, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  color: var(--sghl-ink);
+  font-weight: 650;
+  line-height: 1.2;
 }
 
-@media (min-width: 1024px) {
-  body {
-    display: block;
-    place-items: unset;
-  }
-
-  #app {
-    display: block;
-    grid-template-columns: unset;
-    padding: 0;
-  }
+.sghl-page {
+  animation: sghl-fade-up 0.45s ease both;
 }
 
-.router-link-active.nav-link {
-  background-color: #1e293b;
-  border-left-color: #10b981;
+.sghl-panel {
+  background: var(--sghl-surface-elevated);
+  border: 1px solid var(--sghl-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.sghl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1.2rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+}
+
+.sghl-btn:active {
+  transform: translateY(1px);
+}
+
+.sghl-btn-primary {
+  background: linear-gradient(135deg, var(--sghl-teal-900), var(--sghl-lagoon));
+  color: #fff;
+}
+
+.sghl-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.sghl-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.sghl-btn-ghost {
+  background: transparent;
+  color: var(--sghl-muted);
+}
+
+.sghl-btn-ghost:hover {
+  color: var(--sghl-teal-900);
+}
+
+.sghl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.sghl-field label {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--sghl-ink);
+}
+
+.sghl-field input,
+.sghl-field select {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--sghl-line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--sghl-ink);
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sghl-field input:focus,
+.sghl-field select:focus {
+  border-color: var(--sghl-lagoon);
+  box-shadow: 0 0 0 3px rgba(15, 122, 107, 0.15);
 }

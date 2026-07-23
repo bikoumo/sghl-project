@@ -13,7 +13,12 @@ class User(AbstractUser):
         ('BIOLOGIST', 'Biologiste'),
         ('PATIENT', 'Patient'),
     ]
-    
+    GENDER_CHOICES = [
+        ('M', 'Masculin'),
+        ('F', 'Féminin'),
+        ('O', 'Autre'),
+    ]
+
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='PATIENT')
     service = models.ForeignKey('clinical.Service', on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     phone = models.CharField(max_length=20, blank=True, null=True)
@@ -22,15 +27,19 @@ class User(AbstractUser):
     groupe_sanguin = models.CharField(max_length=10, blank=True, null=True)
     allergies = models.TextField(blank=True, null=True)
     antecedents = models.TextField(blank=True, null=True)
+    # Champs dossier patient
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, null=True)
+    birth_date = models.DateField(blank=True, null=True)
+    matricule = models.CharField(max_length=32, unique=True, blank=True, null=True)
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
-    
+
     def has_service_access(self, obj):
         """Vérifie si l'utilisateur a accès à un objet selon son rôle et son service."""
         if self.role in ['DG', 'SECRETARY_GENERAL']:
-            return True  # Accès complet
-        if self.role == 'SECRETARY_SERVICE' and hasattr(obj, 'service'):
+            return True
+        if self.role in ['DOCTOR', 'BIOLOGIST', 'SECRETARY_SERVICE'] and hasattr(obj, 'service'):
             return obj.service == self.service
         return False
 
@@ -76,12 +85,3 @@ class CommentaireMedical(models.Model):
 
     def __str__(self):
         return f"Commentaire pour {self.patient.username} par {self.medecin.username}"
-
-# Mise à jour de ta méthode has_service_access pour inclure les nouveaux rôles
-def has_service_access(self, obj):
-    if self.role in ['DG', 'SECRETARY_GENERAL']:
-        return True
-    # Accès pour Médecins, Infirmiers, Biologistes : doivent appartenir au même service
-    if self.role in ['DOCTOR', 'BIOLOGIST', 'SECRETARY_SERVICE'] and hasattr(obj, 'service'):
-        return obj.service == self.service
-    return False

@@ -77,25 +77,31 @@
           </div>
           
           <form @submit.prevent="addAppointment" class="p-6 space-y-4">
-            <!-- Patient ID -->
+            <!-- Patient select -->
             <div>
-              <label class="block text-sm font-medium text-slate-900 mb-2">ID Patient</label>
-              <input v-model="newAppt.patient_id" type="number" placeholder="123" required
-                     class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <label class="block text-sm font-medium text-slate-900 mb-2">Patient</label>
+              <select v-model="newAppt.patient_id" required class="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                <option value="" disabled>-- Choisissez un patient --</option>
+                <option v-for="p in patientsList" :key="p.id" :value="p.id">{{ p.nom || p.username }} {{ p.prenom || '' }}</option>
+              </select>
             </div>
 
-            <!-- Doctor ID -->
+            <!-- Doctor select -->
             <div>
-              <label class="block text-sm font-medium text-slate-900 mb-2">ID Médecin</label>
-              <input v-model="newAppt.doctor_id" type="number" placeholder="456" required
-                     class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <label class="block text-sm font-medium text-slate-900 mb-2">Médecin</label>
+              <select v-model="newAppt.doctor_id" required class="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                <option value="" disabled>-- Choisissez un médecin --</option>
+                <option v-for="d in doctorsList" :key="d.id" :value="d.id">{{ d.nom || d.username }} {{ d.prenom || '' }}</option>
+              </select>
             </div>
 
-            <!-- Service ID -->
+            <!-- Service select -->
             <div>
-              <label class="block text-sm font-medium text-slate-900 mb-2">ID Service</label>
-              <input v-model="newAppt.service_id" type="number" placeholder="1"
-                     class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+              <label class="block text-sm font-medium text-slate-900 mb-2">Service</label>
+              <select v-model="newAppt.service_id" class="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                <option value="" disabled>-- Choisissez un service (optionnel) --</option>
+                <option v-for="s in servicesList" :key="s.id" :value="s.id">{{ s.name || s.code }}</option>
+              </select>
             </div>
 
             <!-- Date and Time -->
@@ -103,7 +109,13 @@
               <label class="block text-sm font-medium text-slate-900 mb-2">Date et Heure</label>
               <input v-model="newAppt.appointment_date" type="datetime-local" required
                      class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
-              <p class="text-xs text-slate-500 mt-1">⚠️ Minimum 2 heures à partir de maintenant</p>
+              <p class="text-xs text-slate-500 mt-1">Minimum 2 heures à partir de maintenant</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-900 mb-2">Motif / notes (optionnel)</label>
+              <input v-model="newAppt.notes" type="text" maxlength="255" placeholder="Ex: Contrôle, suivi..."
+                     class="w-full px-4 py-2 border border-slate-300 rounded-lg" />
             </div>
 
             <!-- Modal Actions -->
@@ -139,8 +151,13 @@ const newAppt = ref({
   patient_id: '',
   doctor_id: '',
   appointment_date: '',
-  service_id: ''
+  service_id: '',
+  notes: '',
 });
+
+const patientsList = ref([]);
+const doctorsList = ref([]);
+const servicesList = ref([]);
 
 const summaryStats = computed(() => [
   { label: 'Total', value: appointments.value.length },
@@ -203,51 +220,68 @@ const fetchAppointments = async () => {
   }
 };
 
+const fetchSelectData = async () => {
+  try {
+    const [p, d, s] = await Promise.all([
+      api.instance.get('/clinical/patients'),
+      api.instance.get('/clinical/doctors'),
+      api.instance.get('/clinical/services'),
+    ]);
+    patientsList.value = Array.isArray(p.data) ? p.data : [];
+    doctorsList.value = Array.isArray(d.data) ? d.data : [];
+    servicesList.value = Array.isArray(s.data) ? s.data : [];
+  } catch (e) {
+    console.error('Erreur chargement selects', e);
+  }
+};
+
 const addAppointment = async () => {
   errorMessage.value = '';
   successMessage.value = '';
 
   try {
-    // Validation basique côté client
     if (!newAppt.value.patient_id || !newAppt.value.doctor_id || !newAppt.value.appointment_date) {
       throw new Error('Tous les champs requis doivent être remplis.');
     }
 
-    await api.instance.post('/clinical/appointments/', {
-      patient_id: parseInt(newAppt.value.patient_id),
-      doctor_id: parseInt(newAppt.value.doctor_id),
-      appointment_date: newAppt.value.appointment_date,
-      service_id: newAppt.value.service_id ? parseInt(newAppt.value.service_id) : null
+    // datetime-local → ISO pour le backend
+    const local = newAppt.value.appointment_date;
+    const appointmentDateObj = new Date(local);
+    const minDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    if (appointmentDateObj < minDate) {
+      throw new Error('Le rendez-vous doit être planifié au minimum 2 heures à l\'avance.');
+    }
+    const appointmentDate = appointmentDateObj.toISOString();
+
+    await api.instance.post('/clinical/appointments', {
+      patient_id: parseInt(newAppt.value.patient_id, 10),
+      doctor_id: parseInt(newAppt.value.doctor_id, 10),
+      appointment_date: appointmentDate,
+      service_id: newAppt.value.service_id ? parseInt(newAppt.value.service_id, 10) : null,
+      notes: newAppt.value.notes || null,
     });
 
-    successMessage.value = '✅ Rendez-vous enregistré avec succès !';
+    successMessage.value = 'Rendez-vous enregistré avec succès.';
     showAddModal.value = false;
-    newAppt.value = { patient_id: '', doctor_id: '', appointment_date: '', service_id: '' };
+    newAppt.value = { patient_id: '', doctor_id: '', appointment_date: '', service_id: '', notes: '' };
     await fetchAppointments();
   } catch (error) {
-    // Gestion détaillée des erreurs
     if (error.response?.data?.detail) {
       errorMessage.value = error.response.data.detail;
-    } else if (error.response?.data) {
-      // Traiter les erreurs multiples du formulaire
-      const errorLines = Object.entries(error.response.data)
-        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-        .join('\n');
-      errorMessage.value = errorLines || 'Une erreur est survenue.';
     } else if (error.message) {
       errorMessage.value = error.message;
     } else {
-      errorMessage.value = 'Une erreur inconnue s\'est produite.';
+      errorMessage.value = 'Une erreur est survenue.';
     }
   }
 };
 
 const updateStatus = async (appointmentId, newStatus) => {
   try {
-    await api.instance.patch(`/clinical/appointments/${appointmentId}/`, {
-      status: newStatus
+    await api.instance.patch(`/clinical/appointments/${appointmentId}`, {
+      status: newStatus,
     });
-    successMessage.value = '✅ Rendez-vous mis à jour avec succès !';
+    successMessage.value = 'Rendez-vous mis à jour.';
     await fetchAppointments();
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Erreur lors de la mise à jour.';
@@ -261,5 +295,6 @@ const cancelAppointment = async (appointmentId) => {
 
 onMounted(() => {
   fetchAppointments();
+  fetchSelectData();
 });
 </script>

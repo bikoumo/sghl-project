@@ -1,4 +1,5 @@
 from ninja import Router
+import os
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.utils import timezone
@@ -11,7 +12,7 @@ from authentication.security import RoleBasedAuth, signer
 from clinical.models import Service
 from .models import InternalMessage, MFACode
 from .schemas import (
-    LoginInputSchema, LoginOutputSchema, VerifyMFAInputSchema,
+    LoginInputSchema, LoginOutputSchema, VerifyMFAInputSchema, ResendMFAInputSchema,
     PatientRegisterInputSchema, ServiceOutSchema, ChatMessageCreateSchema,
     ChatMessageOutSchema,
 )
@@ -33,6 +34,69 @@ def _log_mfa_code_to_console(username: str, code: str) -> None:
         f"{banner}\n",
         flush=True,
     )
+
+
+def _smtp_credentials_ready() -> bool:
+    """True uniquement si un envoi SMTP réel est possible."""
+    backend = getattr(settings, 'EMAIL_BACKEND', '')
+    if 'smtp.EmailBackend' not in backend:
+        return False
+    return bool(settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD and settings.EMAIL_HOST)
+
+
+def _send_mfa_email(user, code: str, recipient: str | None = None) -> bool:
+    """Envoie l'OTP par email. Retourne True si expédié, False sinon (sans planter)."""
+    recipient = (recipient or user.email) or os.environ.get('TEST_MFA_RECIPIENT', None)
+    if not recipient:
+        return False
+
+    # Backend console / file = pas de livraisons réelles → déclencher le fallback UI
+    if not _smtp_credentials_ready():
+        return False
+
+    try:
+        import smtplib
+        from django.core.mail import send_mail
+
+        subject = '[SGHL] Code de vérification (OTP)'
+        message = (
+            f"Bonjour {user.first_name or user.username},\n\n"
+            f"Votre code de vérification est : {code}\n"
+            f"Il est valable 5 minutes.\n\nSGHL"
+        )
+        sent = send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
+            [recipient],
+            fail_silently=False,
+        )
+        return sent > 0
+    except smtplib.SMTPAuthenticationError:
+        print(
+            "[SGHL MFA CRITIQUE] Authentification SMTP refusée par Gmail.\n"
+            "  -> Vérifie que le mot de passe d'application dans .env est correct (sans espaces).\n"
+            "  -> Le mot de passe standard Gmail ne fonctionne PAS, il faut un mot de passe d'application.\n"
+            "  -> Va sur https://myaccount.google.com/apppasswords pour en générer un.",
+            flush=True,
+        )
+        return False
+    except smtplib.SMTPException as exc:
+        print(f"[SGHL MFA ERREUR SMTP] {exc}", flush=True)
+        return False
+    except Exception as exc:
+        print(
+            f"[SGHL MFA ERREUR] Echec envoi email OTP vers {recipient}:\n"
+            f"  Type: {type(exc).__name__}\n"
+            f"  Detail: {exc}\n"
+            f"  EMAIL_HOST={settings.EMAIL_HOST}\n"
+            f"  EMAIL_PORT={settings.EMAIL_PORT}\n"
+            f"  EMAIL_USE_TLS={settings.EMAIL_USE_TLS}\n"
+            f"  EMAIL_HOST_USER={settings.EMAIL_HOST_USER}\n"
+            f"  EMAIL_HOST_PASSWORD set={'OUI' if settings.EMAIL_HOST_PASSWORD else 'NON'}",
+            flush=True,
+        )
+        return False
 
 
 def _store_mfa_code(user, code: str) -> None:
@@ -90,40 +154,88 @@ def login_step1(request, data: LoginInputSchema):
     if not user:
         raise HttpError(401, "Email ou mot de passe incorrect.")
 
-    user_auth = authenticate(username=user.username, password=data.password)
-
-    if not user_auth:
+    if not user.check_password(data.password):
         raise HttpError(401, "Email ou mot de passe incorrect.")
 
-    role_mapping = {
-        'ADMIN': 'DG',
-        'SECRETARY': 'SECRETARY_GENERAL',
-        'SECRETARY_GENERAL': 'SECRETARY_GENERAL',
-        'SECRETARY_SERVICE': 'SECRETARY_SERVICE',
-        'DOCTOR': 'DOCTOR',
-        'PATIENT': 'PATIENT',
-        'OTHER': 'BIOLOGIST',
-    }
+    # Le rôle UI est uniquement vérifié (jamais écrit en base)
+    from authentication.roles import canonicalize_role, role_label
 
     if data.role:
-        mapped_role = role_mapping.get(data.role.upper(), user.role)
-        if mapped_role != user.role:
-            user.role = mapped_role
-            user.save(update_fields=['role'])
+        requested_role = canonicalize_role(data.role)
+        if requested_role and requested_role != user.role:
+            raise HttpError(
+                403,
+                f"Rôle incorrect. Ce compte est enregistré en tant que {role_label(user.role)}.",
+            )
 
-    if data.service:
-        service_obj = Service.objects.filter(code__iexact=data.service).first() or Service.objects.filter(name__iexact=data.service).first()
-        if service_obj:
-            user.service = service_obj
-            user.save(update_fields=['service'])
+    # Le service n'est plus réécrit au login (assignation admin / seed uniquement)
+    if data.service and user.role == 'DOCTOR':
+        requested = (data.service or '').strip()
+        current = getattr(user.service, 'code', None) or getattr(user.service, 'name', None)
+        if requested and current and requested.upper() not in {str(current).upper(), getattr(user.service, 'name', '').upper()}:
+            raise HttpError(
+                403,
+                f"Service incorrect. Ce médecin est rattaché à {current}.",
+            )
 
     if user.is_mfa_enabled:
-        code = str(random.randint(100000, 999999))
-        _store_mfa_code(user, code)
-        _log_mfa_code_to_console(user.username, code)
-        return {"message": "Code généré", "requires_mfa": True, "username": user.username}
+        submitted_email = getattr(data, 'username', None) or user.email
+        return _issue_mfa_challenge(user, recipient=submitted_email)
 
     return _issue_auth_response(user)
+
+
+ADMIN_EMAIL = "bikoumoutheresa@gmail.com"
+
+
+def _issue_mfa_challenge(user, recipient: str | None = None) -> dict:
+    code = str(random.randint(100000, 999999))
+    _store_mfa_code(user, code)
+
+    submitted_email = recipient or user.email
+
+    # --- MFA INTELLIGENTE ---
+    # Pour l'admin (bikoumoutheresa@gmail.com) : tenter l'envoi SMTP réel
+    # Si l'envoi échoue, afficher le code dans la console (fallback)
+    # Pour les autres utilisateurs : affichage console uniquement (fallback UI)
+    is_admin = (user.email or "").strip().lower() == ADMIN_EMAIL
+
+    if is_admin:
+        # Tentative d'envoi SMTP réel pour l'admin
+        email_sent = _send_mfa_email(user, code, recipient=submitted_email)
+        if not email_sent:
+            # Si SMTP échoue, fallback console pour ne pas bloquer l'admin
+            _log_mfa_code_to_console(user.username, code)
+        return {
+            "message": "Code envoyé par email" if email_sent else "Code généré (fallback console)",
+            "requires_mfa": True,
+            "username": user.username,
+            "email_sent": email_sent,
+            "fallback_code": None if email_sent else code,
+        }
+    else:
+        # Autres utilisateurs : comportement actuel (code visible dans console/UI)
+        _log_mfa_code_to_console(user.username, code)
+        email_sent = _send_mfa_email(user, code, recipient=submitted_email)
+        return {
+            "message": "Code généré" if not email_sent else "Code envoyé par email",
+            "requires_mfa": True,
+            "username": user.username,
+            "email_sent": email_sent,
+            "fallback_code": None if email_sent else code,
+        }
+
+
+@router.post("/resend-mfa/", response=LoginOutputSchema)
+def resend_mfa(request, data: ResendMFAInputSchema):
+    """Renvoie un nouveau code OTP (email ou fallback UI)."""
+    user = User.objects.filter(Q(username=data.username) | Q(email=data.username)).first()
+    if not user:
+        raise HttpError(400, "Utilisateur introuvable.")
+    if not user.is_mfa_enabled:
+        raise HttpError(400, "MFA non activée pour ce compte.")
+    return _issue_mfa_challenge(user, recipient=user.email)
+
 
 # --- ÉTAPE 2 : VÉRIFICATION DU CODE MFA (Version sécurisée) ---
 @router.post("/verify-mfa/", response=dict)
@@ -139,7 +251,8 @@ def login_step2(request, data: VerifyMFAInputSchema):
             flush=True,
         )
 
-    if settings.DEBUG and str(data.code or "").strip() == "000000":
+    dev_bypass = os.environ.get('DEV_MFA_BYPASS', '').strip().lower() in {'1', 'true', 'yes'}
+    if dev_bypass and str(data.code or "").strip() == "000000":
         token = signer.sign(f"{user.id}:{user.username}:{timezone.now().timestamp()}")
         return {
             "status": "success",
@@ -169,6 +282,7 @@ def list_services(request):
     user = request.auth_user
     cache_key = f"services:{user.id}:{user.role}:{user.service_id or 0}"
     cached = cache.get(cache_key)
+
     if cached is not None:
         return cached
 
@@ -253,6 +367,7 @@ def get_profile_summary(request):
     doctor_count = User.objects.filter(role='DOCTOR').count()
     active_urgent_count = 0
     pending_invoice_count = 0
+    
 
     if user.role == 'DOCTOR':
         patient_count = User.objects.filter(role='PATIENT').count()
@@ -287,28 +402,56 @@ def get_profile_summary(request):
     }
 
 
-@router.post("/register-patient/", auth=RoleBasedAuth(allowed_roles=["RECEPCIONIST", "ADMIN", "DOCTOR"]))
+@router.post(
+    "/register-patient/",
+    auth=RoleBasedAuth(allowed_roles=["DG", "SECRETARY_GENERAL", "SECRETARY_SERVICE", "DOCTOR"]),
+)
 def register_patient(request, payload: PatientRegisterInputSchema):
-    if User.objects.filter(username=payload.username).exists():
+    username = (payload.username or "").strip()
+    if not username:
+        raise HttpError(400, "Le nom d'utilisateur est obligatoire.")
+    if User.objects.filter(username=username).exists():
         raise HttpError(400, "Ce nom d'utilisateur est déjà pris.")
-        
+
+    gender = (payload.gender or "").strip().upper()
+    if gender not in {"M", "F", "O"}:
+        raise HttpError(400, "Genre invalide. Utilisez M, F ou O.")
+
+    if payload.birth_date > timezone.localdate():
+        raise HttpError(400, "La date de naissance ne peut pas être dans le futur.")
+
+    if len(payload.password or "") < 6:
+        raise HttpError(400, "Le mot de passe doit contenir au moins 6 caractères.")
+
+    email = (getattr(payload, 'email', None) or '').strip() or None
+    if email and User.objects.filter(email=email).exists():
+        raise HttpError(400, "Cet email est déjà utilisé.")
+
     patient = User.objects.create_user(
-        username=payload.username,
+        username=username,
         password=payload.password,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
+        email=email,
+        first_name=(payload.first_name or "").strip(),
+        last_name=(payload.last_name or "").strip(),
         role="PATIENT",
-        gender=payload.gender,
+        gender=gender,
         birth_date=payload.birth_date,
-        phone=payload.phone,
-        is_active=True
+        phone=(payload.phone or "").strip() or None,
+        is_active=True,
+        is_mfa_enabled=False,
     )
-    
-    patient.matricule = f"PT-{timezone.now().year}-{patient.id:03d}"
-    patient.save()
-    
+
+    patient.matricule = f"PT-{timezone.now().year}-{patient.id:04d}"
+    patient.save(update_fields=["matricule"])
+
     return {
         "status": "success",
         "message": "Dossier Patient créé avec succès.",
-        "patient": {"id": patient.id, "matricule": patient.matricule, "username": patient.username}
+        "patient": {
+            "id": patient.id,
+            "matricule": patient.matricule,
+            "username": patient.username,
+            "gender": patient.gender,
+            "birth_date": patient.birth_date.isoformat() if patient.birth_date else None,
+        },
     }

@@ -159,11 +159,12 @@ const loading = ref(false);
 const fetchServices = async () => {
   loading.value = true;
   try {
-    // Récupérer les services depuis l'API
-    const response = await api.instance.get('/clinical/services/');
-    services.value = response.data.services || [];
+    const response = await api.instance.get('/clinical/services');
+    const data = response.data;
+    services.value = Array.isArray(data) ? data : (data?.services || []);
   } catch (error) {
     console.error('Erreur chargement services:', error);
+    services.value = [];
   } finally {
     loading.value = false;
   }
@@ -172,18 +173,26 @@ const fetchServices = async () => {
 const fetchRooms = async () => {
   try {
     const response = await api.instance.get('/clinical/rooms/');
-    rooms.value = response.data.rooms || [];
+    const data = response.data;
+    rooms.value = Array.isArray(data) ? data : (data?.rooms || []);
   } catch (error) {
     console.error('Erreur chargement chambres:', error);
+    rooms.value = [];
   }
 };
 
 const fetchBeds = async () => {
   try {
     const response = await api.instance.get('/clinical/beds/');
-    beds.value = response.data.beds || [];
+    const data = response.data;
+    const list = Array.isArray(data) ? data : (data?.beds || []);
+    beds.value = list.map((b) => ({
+      ...b,
+      room: b.room_id,
+    }));
   } catch (error) {
     console.error('Erreur chargement lits:', error);
+    beds.value = [];
   }
 };
 
@@ -192,7 +201,10 @@ const getRoomsForService = (serviceId) => {
 };
 
 const getBeds = (roomId) => {
-  return beds.value.filter(b => b.room === roomId);
+  return beds.value.filter((b) => {
+    const rid = b.room ?? b.room_id;
+    return Number(rid) === Number(roomId);
+  });
 };
 
 const getTotalBedsCount = (serviceId) => {

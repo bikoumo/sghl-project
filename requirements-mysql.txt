@@ -1,4 +1,0 @@
--r requirements.txt
-
-# MySQL — installation locale uniquement (non requis sur Render)
-mysqlclient>=2.2,<3.0

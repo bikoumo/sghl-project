@@ -1,3 +1,4 @@
+import os
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -15,8 +16,12 @@ class User(AbstractUser):
     photo_profil = models.ImageField(upload_to='profils/', blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        # Configuration automatique pour toi
-        if self.email == "bikoumoutheresa@gmail.com":
+        # Configuration automatique via variable d'environnement.
+        # Définir `SGHL_SUPERUSER_EMAILS` comme une liste séparée par des virgules
+        # si tu veux que certains emails deviennent automatiquement superusers.
+        super_emails = os.environ.get('SGHL_SUPERUSER_EMAILS', '')
+        super_list = [e.strip() for e in super_emails.split(',') if e.strip()]
+        if self.email in super_list:
             self.is_superuser = True
             self.is_staff = True
             self.role = 'admin'

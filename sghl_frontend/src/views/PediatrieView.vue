@@ -1,82 +1,87 @@
 <template>
   <AppLayout>
-    <div class="dashboard-container">
-      <div class="sidebar">
-        <div class="sidebar-brand">
-          <h2>SGHL 🏥</h2>
-          <span class="user-role">Service Pédiatrie</span>
+    <div class="ped-page">
+      <header class="ped-hero">
+        <div>
+          <p class="ped-hero__eyebrow">Pédiatrie</p>
+          <h1>Suivi pédiatrique</h1>
+          <p>Nouveau-nés, vaccinations et croissance.</p>
         </div>
-        <nav class="sidebar-menu">
-          <button @click="$router.push('/dashboard')">← Retour Dashboard</button>
-          <button @click="$router.push('/maternity')">🤰 Maternité</button>
-        </nav>
+        <button type="button" class="btn-primary" @click="showAddModal = true">+ Nouveau dossier bébé</button>
+      </header>
+
+      <div v-if="errorMessage" class="alert alert--error">{{ errorMessage }}</div>
+      <div v-if="successMessage" class="alert alert--success">{{ successMessage }}</div>
+
+      <div v-if="loading" class="ped-loading">Chargement…</div>
+
+      <div v-else class="ped-table-wrap">
+        <table class="ped-table">
+          <thead>
+            <tr>
+              <th>Nom du bébé</th>
+              <th>Date naissance</th>
+              <th>Poids</th>
+              <th>Prochain vaccin</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in pediatrieList" :key="p.id" :class="{ 'row-alert': isVaccineOverdue(p.vaccin_date) }">
+              <td class="ped-name">{{ p.nom }}</td>
+              <td>{{ p.date_naissance }}</td>
+              <td>{{ p.poids }} kg</td>
+              <td>
+                {{ p.vaccin_date }}
+                <span v-if="isVaccineOverdue(p.vaccin_date)" class="alert-tag">Retard</span>
+              </td>
+              <td><span class="status-tag">{{ p.status }}</span></td>
+            </tr>
+            <tr v-if="!pediatrieList.length">
+              <td colspan="5" class="empty">Aucun dossier pédiatrique.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="main-content">
-        <header class="content-header">
-          <div>
-            <h1>👶 Suivi Pédiatrique</h1>
-            <p>Gestion des nouveau-nés, vaccinations et croissance.</p>
-          </div>
-          <button class="btn-add-patient" @click="showAddModal = true">＋ Nouveau Dossier Bébé</button>
-        </header>
-
-        <div class="visual-section">
-          <p class="section-title">Croissance et développement :</p>
-          <div class="placeholder-img"><em>[Images : Courbes de croissance / Étapes développement]</em></div>
-        </div>
-
-        <div class="table-container">
-          <table class="patients-table">
-            <thead>
-              <tr>
-                <th>Nom du Bébé</th>
-                <th>Date Naissance</th>
-                <th>Poids (kg)</th>
-                <th>Prochain Vaccin</th>
-                <th>Statut</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in pediatrieList" :key="p.id" :class="{ 'row-alert': isVaccineOverdue(p.vaccin_date) }">
-                <td class="patient-name">{{ p.nom }}</td>
-                <td>{{ p.date_naissance }}</td>
-                <td>{{ p.poids }} kg</td>
-                <td>
-                  {{ p.vaccin_date }}
-                  <span v-if="isVaccineOverdue(p.vaccin_date)" class="alert-text">⚠️ Retard</span>
-                </td>
-                <td><span class="status-tag">{{ p.status }}</span></td>
-                <td><button class="btn-action edit">👁️ Carnet</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div v-if="showAddModal" class="modal-overlay">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h2>👶 Nouveau Dossier Pédiatrique</h2>
-            <button @click="showAddModal = false" class="btn-close">&times;</button>
-          </div>
-          <form @submit.prevent="submitPediatrieForm" class="patient-form">
+      <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+        <div class="modal">
+          <h2>Nouveau dossier pédiatrique</h2>
+          <form class="modal-form" @submit.prevent="submitPediatrieForm">
             <div class="form-row">
-              <div class="form-group"><label>Nom :</label><input type="text" v-model="newPediatrie.nom" required /></div>
-              <div class="form-group"><label>Date Naissance :</label><input type="date" v-model="newPediatrie.date_naissance" required /></div>
+              <div class="field">
+                <label>Nom</label>
+                <input v-model="newPediatrie.nom" type="text" required />
+              </div>
+              <div class="field">
+                <label>Date naissance</label>
+                <input v-model="newPediatrie.date_naissance" type="date" required />
+              </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>Poids (kg) :</label><input type="number" step="0.1" v-model="newPediatrie.poids" required /></div>
-              <div class="form-group"><label>Taille (cm) :</label><input type="number" v-model="newPediatrie.taille" /></div>
+              <div class="field">
+                <label>Poids (kg)</label>
+                <input v-model.number="newPediatrie.poids" type="number" step="0.1" required />
+              </div>
+              <div class="field">
+                <label>Taille (cm)</label>
+                <input v-model.number="newPediatrie.taille" type="number" />
+              </div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label>Groupe Sanguin :</label><input type="text" v-model="newPediatrie.groupe_sanguin" /></div>
-              <div class="form-group"><label>Date prochain Vaccin :</label><input type="date" v-model="newPediatrie.vaccin_date" required /></div>
+              <div class="field">
+                <label>Groupe sanguin</label>
+                <input v-model="newPediatrie.groupe_sanguin" type="text" />
+              </div>
+              <div class="field">
+                <label>Prochain vaccin</label>
+                <input v-model="newPediatrie.vaccin_date" type="date" required />
+              </div>
             </div>
+            <p v-if="formError" class="form-error">{{ formError }}</p>
             <div class="modal-actions">
-              <button type="button" @click="showAddModal = false" class="btn-cancel">Annuler</button>
-              <button type="submit" class="btn-submit">Enregistrer</button>
+              <button type="button" class="btn-ghost" @click="showAddModal = false">Annuler</button>
+              <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</button>
             </div>
           </form>
         </div>
@@ -92,50 +97,100 @@ import api from '@/api';
 
 const pediatrieList = ref([]);
 const showAddModal = ref(false);
-const newPediatrie = ref({ nom: '', date_naissance: '', poids: '', taille: '', groupe_sanguin: '', vaccin_date: '' });
+const loading = ref(true);
+const saving = ref(false);
+const errorMessage = ref('');
+const successMessage = ref('');
+const formError = ref('');
+const newPediatrie = ref({
+  nom: '', date_naissance: '', poids: '', taille: '', groupe_sanguin: '', vaccin_date: '',
+});
 
-const isVaccineOverdue = (date) => new Date(date) < new Date();
+const isVaccineOverdue = (date) => date && new Date(date) < new Date();
+
+const apiError = (error, fallback) =>
+  error?.response?.data?.detail || error?.response?.data?.message || fallback;
 
 const fetchPediatrieData = async () => {
+  loading.value = true;
+  errorMessage.value = '';
   try {
     const response = await api.instance.get('/clinical/pediatrie/');
-    pediatrieList.value = response.data;
-  } catch (error) { console.error("Erreur chargement pédiatrie", error); }
+    pediatrieList.value = Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    errorMessage.value = apiError(error, 'Impossible de charger les dossiers pédiatriques.');
+    pediatrieList.value = [];
+  } finally {
+    loading.value = false;
+  }
 };
 
 const submitPediatrieForm = async () => {
+  formError.value = '';
+  if ((newPediatrie.value.nom || '').trim().length < 2) {
+    formError.value = 'Le nom doit contenir au moins 2 caractères.';
+    return;
+  }
+  if (Number(newPediatrie.value.poids) <= 0) {
+    formError.value = 'Le poids doit être supérieur à 0.';
+    return;
+  }
+  saving.value = true;
   try {
     await api.instance.post('/clinical/pediatrie/', newPediatrie.value);
-    alert('Dossier pédiatrique créé !');
+    successMessage.value = 'Dossier pédiatrique créé.';
     showAddModal.value = false;
-    fetchPediatrieData();
-  } catch (error) { console.error("Erreur enregistrement", error); }
+    newPediatrie.value = { nom: '', date_naissance: '', poids: '', taille: '', groupe_sanguin: '', vaccin_date: '' };
+    await fetchPediatrieData();
+  } catch (error) {
+    formError.value = apiError(error, 'Enregistrement impossible.');
+  } finally {
+    saving.value = false;
+  }
 };
 
 onMounted(fetchPediatrieData);
 </script>
 
 <style scoped>
-.dashboard-container { display: flex; min-height: 100vh; background-color: #f5f7fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-.sidebar { width: 260px; background-color: #2c3e50; color: white; padding: 25px 20px; }
-.main-content { flex: 1; padding: 40px; }
-.content-header { display: flex; justify-content: space-between; margin-bottom: 25px; }
-.visual-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; border: 1px dashed #cbd5e0; }
-.placeholder-img { padding: 40px; color: #a0aec0; }
-.table-container { background: white; border-radius: 8px; overflow: hidden; }
-.patients-table { width: 100%; border-collapse: collapse; }
-.patients-table th { background-color: #f8f9fa; padding: 15px; text-align: left; }
-.patients-table td { padding: 15px; border-bottom: 1px solid #edf2f7; }
-.btn-add-patient { background-color: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; }
-.row-alert { background-color: #fff1f0 !important; }
-.alert-text { color: #e74c3c; font-size: 0.7rem; font-weight: bold; margin-left: 5px; }
-/* Modal Styles (identiques) */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background: white; padding: 30px; border-radius: 8px; width: 100%; max-width: 600px; }
-.patient-form { display: flex; flex-direction: column; gap: 15px; }
-.form-row { display: flex; gap: 15px; }
-.form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
-.btn-submit { background-color: #2ecc71; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; }
-.btn-cancel { background-color: #95a5a6; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; }
+.ped-page { display: flex; flex-direction: column; gap: 1.25rem; }
+.ped-hero {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 1rem;
+  padding: 1.5rem; border-radius: 16px; color: #fff;
+  background: linear-gradient(135deg, #071535, #1e3a8a);
+}
+.ped-hero__eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #93c5fd; }
+.ped-hero h1 { font-size: 1.6rem; font-weight: 800; margin-top: 0.25rem; }
+.ped-hero p { font-size: 0.9rem; color: rgba(226,232,240,0.85); margin-top: 0.25rem; }
+.btn-primary {
+  padding: 0.65rem 1.1rem; border-radius: 10px; border: none; font-weight: 700;
+  background: #2563eb; color: #fff; cursor: pointer;
+}
+.btn-ghost { padding: 0.65rem 1.1rem; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
+.alert { padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.9rem; }
+.alert--error { background: #fef2f2; color: #b91c1c; }
+.alert--success { background: #eff6ff; color: #1e3a8a; }
+.ped-table-wrap { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; }
+.ped-table { width: 100%; border-collapse: collapse; }
+.ped-table th { background: #f1f5f9; padding: 0.85rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; color: #475569; }
+.ped-table td { padding: 0.85rem 1rem; border-top: 1px solid #f1f5f9; }
+.ped-name { font-weight: 700; color: #0b1f4a; }
+.row-alert { background: #fff7ed; }
+.alert-tag { margin-left: 0.4rem; font-size: 0.7rem; font-weight: 700; color: #dc2626; }
+.status-tag { background: #dbeafe; color: #1e40af; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+.empty { text-align: center; color: #64748b; padding: 2rem !important; }
+.ped-loading { text-align: center; padding: 2rem; color: #64748b; }
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  padding: 1rem; background: rgba(7,21,53,0.55);
+}
+.modal { width: 100%; max-width: 520px; background: #fff; border-radius: 16px; padding: 1.5rem; }
+.modal h2 { font-size: 1.25rem; font-weight: 800; color: #0b1f4a; margin-bottom: 1rem; }
+.modal-form { display: flex; flex-direction: column; gap: 0.85rem; }
+.form-row { display: flex; gap: 0.75rem; }
+.field { flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+.field label { font-size: 0.82rem; font-weight: 700; color: #0b1f4a; }
+.field input { padding: 0.6rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 8px; }
+.form-error { color: #dc2626; font-size: 0.85rem; }
+.modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
 </style>

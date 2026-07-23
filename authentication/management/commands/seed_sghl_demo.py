@@ -12,10 +12,13 @@ from clinical.models import (
     ExamRequest,
     ExamResult,
     Invoice,
+    MaternityRecord,
+    PediatricRecord,
     Provision,
     Room,
     Service,
 )
+from finance_logistics.models import Medication, PartnerSchool
 
 
 class Command(BaseCommand):
@@ -112,6 +115,7 @@ class Command(BaseCommand):
         services = self._seed_infrastructure()
         users = self._seed_users(User, services, password, enable_mfa)
         self._seed_clinical_data(users, services)
+        self._seed_pediatric_maternity()
         self._seed_messages(users, services)
         self._print_final_summary(password, enable_mfa)
 
@@ -122,15 +126,15 @@ class Command(BaseCommand):
         )
 
         service_specs = [
-            ("Pediatrie", "PED", "Service de pediatrie", True),
-            ("Urgences", "URG", "Service d'urgence 24h/24", True),
-            ("Laboratoire", "LAB", "Analyses biologiques", True),
-            ("Banque", "BNQ", "Service financier", False),
-            ("Logistique", "LOG", "Support logistique", False),
+            ("Pediatrie", "PED", "Service de pediatrie", True, 3.8720, 11.5180),
+            ("Urgences", "URG", "Service d'urgence 24h/24", True, 3.8667, 11.5167),
+            ("Laboratoire", "LAB", "Analyses biologiques", True, 3.8650, 11.5150),
+            ("Banque", "BNQ", "Service financier", False, 3.8640, 11.5140),
+            ("Logistique", "LOG", "Support logistique", False, 3.8630, 11.5130),
         ]
 
         services = {}
-        for name, code, description, is_open in service_specs:
+        for name, code, description, is_open, lat, lng in service_specs:
             service, created = Service.objects.get_or_create(
                 code=code,
                 defaults={
@@ -138,8 +142,15 @@ class Command(BaseCommand):
                     "name": name,
                     "description": description,
                     "is_open_h24": is_open,
+                    "location_lat": lat,
+                    "location_long": lng,
                 },
             )
+            if not created:
+                service.location_lat = lat
+                service.location_long = lng
+                service.is_open_h24 = is_open
+                service.save(update_fields=["location_lat", "location_long", "is_open_h24"])
             services[code] = service
             if created:
                 self.stdout.write(self.style.SUCCESS(f"Service cree : {service.name} ({code})"))
@@ -231,6 +242,106 @@ class Command(BaseCommand):
                 },
             )
 
+        # Ajouter des médecins supplémentaires (pour arriver à ~10 médecins)
+        extra_docs = []
+        for i in range(2, 11):
+            uname = f'doctor_demo_{i}'
+            email = f'doctor{i}@sghl.com'
+            doc, created = User.objects.get_or_create(
+                username=uname,
+                defaults={
+                    'email': email,
+                    'first_name': f'Doc{i}',
+                    'last_name': 'Demo',
+                    'role': 'DOCTOR',
+                    'service': services.get('PED'),
+                    'is_active': True,
+                }
+            )
+            doc.set_password(self.DEMO_PASSWORD)
+            doc.save()
+            extra_docs.append(doc)
+
+        # Générer 20 rendez-vous répartis entre plusieurs médecins
+        import random as pyrandom
+        doctors_pool = [doctor] + extra_docs
+        # S'assurer que 'extra_patients' existe
+        try:
+            extra_patients
+        except NameError:
+            extra_patients = []
+            for username, email, first_name, last_name in [
+                ('patient_demo_2', 'patient2@sghl.com', 'Aude', 'Mouanda'),
+                ('patient_demo_3', 'patient3@sghl.com', 'Rodolphe', 'Dienga'),
+            ]:
+                patient_user, _ = User.objects.get_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'role': 'PATIENT',
+                        'is_active': True,
+                    },
+                )
+                patient_user.set_password(self.DEMO_PASSWORD)
+                patient_user.save(update_fields=['password'])
+                extra_patients.append(patient_user)
+
+        patients_pool = [patient] + extra_patients
+        for i in range(20):
+            d = pyrandom.choice(doctors_pool)
+            p = pyrandom.choice(patients_pool)
+            slot = timezone.now() + timedelta(days=pyrandom.randint(0,5), hours=pyrandom.randint(3,72))
+            status = pyrandom.choice(['SCHEDULED', 'CONFIRMED'])
+            Appointment.objects.get_or_create(
+                patient=p,
+                doctor=d,
+                appointment_date=slot,
+                defaults={
+                    'status': status,
+                    'service': services['PED'],
+                    'created_by': d,
+                }
+            )
+
+        # Créer 50 médicaments si absent (finance_logistics.Medication) + lots de stock
+        from datetime import date
+        from finance_logistics.models import StockBatch
+
+        med_names = [f'Medicament_{i}' for i in range(1, 51)]
+        for i, name in enumerate(med_names, start=1):
+            code = f'MED-{i:04d}'
+            med, _ = Medication.objects.get_or_create(
+                code=code,
+                defaults={
+                    'name': name,
+                    'unit_price': 500 + (i * 10),
+                    'description': f'Fourniture de test {name}'
+                }
+            )
+            # Au moins un lot non périmé pour les tests de vente
+            StockBatch.objects.get_or_create(
+                medication=med,
+                batch_number=f'LOT-{code}-A',
+                defaults={
+                    'quantity_in_stock': 100,
+                    'expiry_date': date.today().replace(year=date.today().year + 1),
+                },
+            )
+
+        # Créer 3 ecoles/partenaires pour tests Tiers-Payant
+        partners = [
+            ('Lycée Saint-Pierre', 'SCHOOL', 'contact@lycee-stp.com'),
+            ('Ecole Technique SGHL', 'SCHOOL', 'contact@et-sghl.com'),
+            ('Assurance Nationale', 'INSURANCE', 'contact@assurnat.com'),
+        ]
+        for name, ptype, email in partners:
+            PartnerSchool.objects.get_or_create(
+                name=name,
+                defaults={'partner_type': ptype, 'contact_email': email},
+            )
+
         extra_patients = []
         for username, email, first_name, last_name in [
             ('patient_demo_2', 'patient2@sghl.com', 'Aude', 'Mouanda'),
@@ -315,6 +426,28 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS("Messages internes de demo ajoutes."))
+
+    def _seed_pediatric_maternity(self):
+        from datetime import date, timedelta
+
+        if not PediatricRecord.objects.exists():
+            PediatricRecord.objects.create(
+                nom="Ngoma Junior",
+                date_naissance=date.today() - timedelta(days=120),
+                poids="4.2",
+                taille=58,
+                groupe_sanguin="O+",
+                vaccin_date=date.today() + timedelta(days=14),
+            )
+        if not MaternityRecord.objects.exists():
+            MaternityRecord.objects.create(
+                nom="Mbarga",
+                prenom="Claire",
+                date_terme=date.today() + timedelta(days=45),
+                next_visit=date.today() + timedelta(days=7),
+                status="Suivi en cours",
+            )
+        self.stdout.write(self.style.SUCCESS("Donnees pediatrie / maternite de demo ajoutees."))
 
     def _print_final_summary(self, password, enable_mfa):
         mfa_label = "OUI (OTP dans la console runserver en local)" if enable_mfa else "NON (connexion directe apres login)"
