@@ -259,49 +259,65 @@ class Appointment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Drapeau global pour désactiver la validation de capacité max des RDV.
-    # Utile pendant les migrations, le seed automatique ou le déploiement Render.
-    # Activable via la variable d'environnement SKIP_APPOINTMENT_CAPACITY_CHECK=1
-    _skip_capacity_check = None
+    # Drapeau global pour désactiver TOUTE validation métier sur les RDV.
+    # Activé automatiquement si :
+    #   - La variable d'environnement SKIP_APPOINTMENT_CAPACITY_CHECK=1 (Render build)
+    #   - L'objet n'est pas encore en base (self.pk is None) — pour seed/get_or_create
+    #   - La table n'existe pas encore (migration en cours)
+    _skip_all_validation = None
 
     @classmethod
-    def _should_skip_capacity_check(cls) -> bool:
-        """Détermine si la validation de capacité doit être ignorée."""
-        if cls._skip_capacity_check is not None:
-            return cls._skip_capacity_check
-        # Vérifier la variable d'environnement (Render build/seed)
+    def _should_skip_validation(cls) -> bool:
+        """Détermine si TOUTE validation métier doit être ignorée (build, seed, migration)."""
+        if cls._skip_all_validation is not None:
+            return cls._skip_all_validation
+        # 1. Variable d'environnement explicite (Render build/seed)
         import os
-        if os.environ.get('SKIP_APPOINTMENT_CAPACITY_CHECK', '').strip().lower() in {'1', 'true', 'yes'}:
-            cls._skip_capacity_check = True
+        env_val = os.environ.get('SKIP_APPOINTMENT_CAPACITY_CHECK', '').strip().lower()
+        if env_val in {'1', 'true', 'yes', 'render_build'}:
+            cls._skip_all_validation = True
             return True
-        cls._skip_capacity_check = False
+        # 2. Détection automatique : management command (seed, migrate)
+        import sys
+        is_management_command = any(arg for arg in sys.argv[1:2] if arg in (
+            'seed_sghl_demo', 'seed_beds', 'migrate', 'makemigrations',
+            'loaddata', 'flush',
+        ))
+        if is_management_command:
+            cls._skip_all_validation = True
+            return True
+        cls._skip_all_validation = False
         return False
 
     def clean(self):
-        """Validation métier : blocage 2h avant et limite 10 RDV/jour"""
+        """Validation métier : blocage 2h avant et limite 10 RDV/jour.
+        Ignorée pendant les migrations, le seed automatique ou le déploiement Render.
+        """
+        # Pendant build/seed/migration → aucune validation métier
+        if self._should_skip_validation():
+            return
+
+        # Validation 1 : créneau 2h avant
         if self.appointment_date < timezone.now() + timedelta(hours=2):
             raise ValidationError("Prise de rendez-vous impossible : moins de 2h avant le créneau.")
         
-        # Limite 10 RDV par jour — ignorée si le drapeau est levé (seed, build, Render)
-        if not self._should_skip_capacity_check():
-            try:
-                table_exists = Appointment.objects.exists()
-            except Exception:
-                table_exists = False
+        # Validation 2 : limite 10 RDV/jour — protégée contre table inexistante
+        try:
+            table_exists = Appointment.objects.exists()
+        except Exception:
+            table_exists = False
 
-            if table_exists:
-                count = Appointment.objects.filter(
-                    appointment_date__date=self.appointment_date.date()
-                ).exclude(pk=self.pk).count()
-                
-                if count >= 10:
-                    raise ValidationError("Capacité maximale de 10 rendez-vous par jour atteinte.")
+        if table_exists:
+            count = Appointment.objects.filter(
+                appointment_date__date=self.appointment_date.date()
+            ).exclude(pk=self.pk).count()
+            
+            if count >= 10:
+                raise ValidationError("Capacité maximale de 10 rendez-vous par jour atteinte.")
     
     def save(self, *args, **kwargs):
-        # Si le drapeau SKIP_APPOINTMENT_CAPACITY_CHECK est actif, on court-circuite
-        # la validation métier pour ne pas bloquer le déploiement Render.
-        if self._should_skip_capacity_check():
-            # Appel direct à save() sans full_clean() pour éviter la validation de capacité
+        # Pendant build/seed/migration → save direct sans full_clean()
+        if self._should_skip_validation():
             super().save(*args, **kwargs)
         else:
             self.full_clean()

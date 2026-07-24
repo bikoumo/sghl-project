@@ -57,6 +57,8 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
       - key: DEFAULT_FROM_EMAIL
         value: sghl-notification@hopital.com
+      - key: SKIP_APPOINTMENT_CAPACITY_CHECK
+        value: "1"
 
   # ---------------------------------------------------------------------------
   # Frontend Vue 3 (Static Site) — type: web + runtime: static
