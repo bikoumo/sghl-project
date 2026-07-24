@@ -265,12 +265,20 @@ class Appointment(models.Model):
             raise ValidationError("Prise de rendez-vous impossible : moins de 2h avant le créneau.")
         
         # Limite 10 RDV par jour (exclure le RDV courant si mise à jour)
-        count = Appointment.objects.filter(
-            appointment_date__date=self.appointment_date.date()
-        ).exclude(pk=self.pk).count()
-        
-        if count >= 10:
-            raise ValidationError("Capacité maximale de 10 rendez-vous par jour atteinte.")
+        # Ignorée pendant les migrations (table inexistante), le seed automatique,
+        # ou si la base est vide — pour ne pas bloquer le déploiement sur Render.
+        try:
+            table_exists = Appointment.objects.exists()
+        except Exception:
+            table_exists = False
+
+        if table_exists:
+            count = Appointment.objects.filter(
+                appointment_date__date=self.appointment_date.date()
+            ).exclude(pk=self.pk).count()
+            
+            if count >= 10:
+                raise ValidationError("Capacité maximale de 10 rendez-vous par jour atteinte.")
     
     def save(self, *args, **kwargs):
         self.full_clean()
