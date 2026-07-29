@@ -6,7 +6,7 @@ from .api import api
 
 urlpatterns = [
     # Redirection racine vers la documentation Swagger de l'API
-    path('', lambda request: redirect('/api/v2/docs')),
+    path('', lambda request: redirect('/admin/')),
     
     # Admin Django
     path('admin/', admin.site.urls),
