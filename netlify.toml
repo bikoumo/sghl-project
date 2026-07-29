@@ -1,0 +1,4 @@
+[build]
+  base = "sghl_frontend"
+  publish = "dist"
+  command = "npm run build"
