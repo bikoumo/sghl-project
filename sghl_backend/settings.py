@@ -36,7 +36,18 @@ SECRET_KEY = os.environ.get(
 DEBUG = env_bool('DEBUG', True)
 SHOW_MFA_CODE_IN_CONSOLE = env_bool('SHOW_MFA_CODE_IN_CONSOLE', DEBUG)
 
-ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['*']) or ['*']
+# ALLOWED_HOSTS — lecture depuis l'environnement (Render, .env, etc.)
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', [])
+
+# Ajouter automatiquement le wildcard Render (.onrender.com) pour le Health Check
+ALLOWED_HOSTS.append('.onrender.com')
+
+# Ajouter les hôtes locaux pour le développement / production locale
+ALLOWED_HOSTS.extend(['localhost', '127.0.0.1', '0.0.0.0'])
+
+# Fallback universel : si aucun hôte n'est configuré, tout autoriser
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
