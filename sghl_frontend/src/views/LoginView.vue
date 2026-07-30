@@ -330,12 +330,19 @@ const handleLogin = async () => {
       : Array.isArray(detail)
         ? detail.map((d) => d.msg || d).join(' ')
         : null;
+    const isProduction = typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
     errorMessage.value =
       detailText ||
       error?.response?.data?.message ||
       (error?.code === 'ERR_NETWORK'
-        ? 'Serveur inaccessible. Vérifiez que l’API tourne sur le port 8000.'
-        : 'Erreur de connexion.');
+        ? isProduction
+          ? 'Le serveur backend demarre... patientez 30-60s le temps que Render le reveille, puis reessayez.'
+          : 'Serveur inaccessible. Verifiez que l API tourne sur le port 8000.'
+        : error?.code === 'ECONNABORTED'
+          ? 'Le serveur met trop de temps a repondre (cold start Render). Reessayez dans une minute.'
+          : 'Erreur de connexion.');
   } finally {
     loading.value = false;
   }

@@ -5,6 +5,7 @@ const apiBaseUrl = getApiBaseUrl()
 
 const api = axios.create({
   baseURL: apiBaseUrl,
+  timeout: 90000, // 90s — laisse le temps au serveur Render de sortir de veille (cold start)
   headers: {
     'Content-Type': 'application/json',
   },
